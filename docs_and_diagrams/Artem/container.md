@@ -1,0 +1,76 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+ 
+title КЛИЕНТ C4 CONTAINER
+ 
+' === ЭЛЕМЕНТЫ ===
+ 
+Person(client, "Клиент", "Пользователь, оформляющий полис")
+ 
+System_Boundary(osago_service, "Сервис оформления ОСАГО для физлиц") {
+ 
+    Container(web_app, "Web App", "React SPA", "Отображает формы, вводит данные, оплачивает")
+    
+    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — расчет, оформление, оплата")
+    
+    ContainerDb(database, "Database", "PostgreSQL", "Хранит данные о полисах и клиентах")
+    
+    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранит фото, подписи и документы")
+    
+    Container(worker, "Worker", "Python", "Асинхронная обработка: PDF, регистрация, отправка")
+}
+ 
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами")
+System_Ext(payment_sys, "Платежная система", "Внешняя система проведения платежей")
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система")
+ 
+' === СВЯЗИ ===
+ 
+' Клиент -> Web App
+Rel(client, web_app, "Отправляет форму, вводит данные,\nоплачивает")
+ 
+' Web App -> API
+Rel(web_app, api, "REST/HTTPS JSON — расчет, оформление,\nоплата")
+ 
+' API -> Database
+Rel(api, database, "Читает и записывает данные\nполисов и клиентов")
+ 
+' API -> Object Storage
+Rel(api, object_storage, "Сохраняет и читает\nфото и подписи")
+ 
+' API -> E-mail система
+Rel(api, email_sys, "Отправляет сведения на\nполис и чека")
+ 
+' API -> Платежная система
+Rel(api, payment_sys, "HTTP(S), JSON Создает платежную сессию")
+Rel(api, payment_sys, "HTTP(S), Webhook об оплате")
+ 
+' API -> АИС ОСАГО
+Rel(api, ais_osago, "HTTP(S), JSON Передача КЗМ, регистрация\nполиса")
+ 
+' Worker -> Database
+Rel(worker, database, "Забирает задачи в статусе\nnew/pending sql")
+ 
+' Worker -> Object Storage
+Rel(worker, object_storage, "Читает фото и подписи\nдля обработки")
+ 
+' Worker -> АИС ОСАГО (пунктир)
+Rel(worker, ais_osago, "HTTP(S), JSON Повторно регистрирует полис\n(при ошибке/таймауте)", $tags="dashed")
+ 
+' Worker -> Платежная система (пунктир)
+Rel(worker, payment_sys, "HTTP(S), JSON Проверяет зависшие платежи\n(по расписанию)", $tags="dashed")
+ 
+' E-mail система -> Клиент (пунктир)
+Rel(email_sys, client, "Доставка письма со ссылкой на полис и\nчек", $tags="dashed")
+ 
+' Worker -> E-mail система (пунктир)
+Rel(worker, email_sys, "Повторная отправка письма (при сбое)", $tags="dashed")
+ 
+' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
+' Размещаем внешние системы внизу под базами данных
+database -[hidden]down- email_sys
+object_storage -[hidden]down- payment_sys
+database -[hidden]right- payment_sys
+payment_sys -[hidden]right- ais_osago
+ 
+@enduml
