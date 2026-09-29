@@ -19,7 +19,7 @@ System_Boundary(fixation_system, "Web-сервис фиксации ДТП") {
     Container(api, "API (FASTAPI)", "Python / FastAPI", "Обработка REST-запросов, актов фиксации ДТП")
 
     Container(worker, "Worker", "Python", "Асинхронная обработка задач, генератор PDF, скрипты")
-
+c:\Users\tagan\AppData\Local\Temp\Rar$DRa29516.25221.rartemp\Insurance-system-main\docs_and_diagrams\Dima\container.puml c:\Users\tagan\AppData\Local\Temp\Rar$DRa29516.25221.rartemp\Insurance-system-main\docs_and_diagrams\Dima\context.puml
     ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранение фотографий ДТП и подписей")
 
     ContainerDb(database, "Database", "PostgreSQL", "Хранение данных активных полисов и данных")
