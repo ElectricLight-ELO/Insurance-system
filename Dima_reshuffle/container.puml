@@ -1,0 +1,74 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title КОНТЕЙНЕРЫ: Система фиксации ДТП
+
+' === НАСТРОЙКА ЦВЕТОВ ===
+AddElementTag("внешняя", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
+
+' === ЭЛЕМЕНТЫ ===
+
+Person_Ext(expert, "Аварийный эксперт", "Сотрудник, выезжающий на место ДТП")
+Person(client, "Клиент", "Участник ДТП")
+
+System_Boundary(fixation_system, "Web-сервис фиксации ДТП") {
+
+    Container(terminal, "Служебный терминал", "Android", "Терминал подтверждения для фотографий на базе Android")
+
+    Container(api, "API (FASTAPI)", "Python / FastAPI", "Обработка REST-запросов, актов фиксации ДТП")
+
+    Container(worker, "Worker", "Python", "Асинхронная обработка задач, генератор PDF, скрипты")
+
+    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранение фотографий ДТП и подписей")
+
+    ContainerDb(database, "Database", "PostgreSQL", "Хранение данных активных полисов и данных")
+}
+
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя")
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя")
+
+' === РАСКЛАДКА (невидимые связи) ===
+
+' Ряд 1: эксперт слева, клиент справа (над Worker)
+Lay_R(expert, client)
+
+' Ряд 2: терминал -> API -> Worker (клиент строго над Worker)
+Lay_D(expert, terminal)
+Lay_D(client, worker)
+Lay_R(terminal, api)
+Lay_R(api, worker)
+
+' Ряд 3: Object Storage под API, Database под Worker
+Lay_D(api, object_storage)
+Lay_D(worker, database)
+
+' Ряд 4: внешние системы внизу (E-mail слева, АИС ОСАГО справа)
+Lay_D(object_storage, email_sys)
+Lay_D(database, ais_osago)
+Lay_R(email_sys, ais_osago)
+
+' === СВЯЗИ ===
+
+' Внешние взаимодействия
+Rel(expert, terminal, "Загрузка фотографий\nрезультатов осмотра и информации")
+Rel(client, terminal, "Подпись")
+Rel(client, api, "Электронный протокол осмотра", "PDF")
+
+' Внутренние взаимодействия
+Rel(terminal, api, "Отправка результатов осмотра", "HTTPS, JSON")
+Rel(api, object_storage, "Сохранение фото и подписей", "HTTPS, JSON")
+Rel(api, worker, "Создание задач на обработку")
+Rel(api, database, "Чтение и запись актов фиксации", "HTTPS, JSON")
+Rel(api, ais_osago, "Проверка наличия ОСАГО", "HTTPS")
+
+' Взаимодействия Worker
+Rel(worker, database, "Забирает задачи в статусе new/pending sql")
+Rel(worker, object_storage, "Чтение фото и подписей", "HTTPS")
+Rel(worker, ais_osago, "Повторный запрос/регистрация при сбоях", "HTTPS, JSON")
+Rel(worker, email_sys, "Запрос на отправку протокола", "HTTPS")
+
+' ПУНКТИРНАЯ стрелка от E-mail системы к Клиенту
+Rel(email_sys, client, "Отправка электронного протокола осмотра", $tags="пунктир")
+
+@enduml
