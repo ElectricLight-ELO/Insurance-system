@@ -1,59 +1,90 @@
- 
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
- 
-title КОНТЕЙНЕРЫ: Система фиксации ДТП
- 
-' Настройка цветов для внешних систем (серый)
-AddSystemTag("внешняя", $bgColor="#A9A9A9", $borderColor="#8A8A8A")
- 
-' Явно определяем тег для пунктирной линии
-AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#707070")
- 
-' === ВНЕШНИЕ УЧАСТНИКИ И СИСТЕМЫ ===
- 
-Person_Ext(expert, "Аварийный эксперт", "Сотрудник, выезжающий на место ДТП")
+
+title АВАРИЙНЫЙ ЭКСПЕРТ C4 CONTAINER
+
+' === НАСТРОЙКА ЦВЕТОВ (как в Context) ===
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("сотрудник", $bgColor="#438DD5", $borderColor="#316CA5", $fontColor="#FFFFFF")
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
+
+' === ЭЛЕМЕНТЫ ===
+
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="сотрудник")
+Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="сотрудник")
 Person(client, "Клиент", "Участник ДТП")
- 
-System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя")
-System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя")
- 
-' === ГРАНИЦЫ СИСТЕМЫ ===
- 
-System_Boundary(fixation_system, "Web-сервис фиксации ДТП") {
- 
-    Container(terminal, "Служебный терминал", "Android", "Терминал подтверждения для фотографий на базе Android")
- 
-    Container(api, "API (FASTAPI)", "Python / FastAPI", "Обработка REST-запросов, актов фиксации ДТП")
- 
-    Container(worker, "Worker", "Python", "Асинхронная обработка задач, генератор PDF, скрипты")
-    
-    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранение фотографий ДТП и подписей")
-    
-    ContainerDb(database, "Database", "PostgreSQL", "Хранение данных активных полисов и данных")
+
+' Центральный сервис (модуль фиксации ДТП в составе ИС ОСАГО)
+System_Boundary(fixation_system, "ИС ОСАГО — модуль фиксации ДТП") {
+
+    Container(web_app, "Web App", "React SPA", "Рабочее место эксперта: загрузка фото осмотра,\nсведения о ДТП, электронная подпись клиента")
+
+    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — акты фиксации ДТП,\nосмотр, проверка полиса ОСАГО")
+
+    Container(worker, "Worker", "Python", "Асинхронная обработка:\nгенерация PDF-протокола, рассылка")
+
+    ContainerDb(database, "Database", "PostgreSQL", "Хранит заявления о ДТП, акты фиксации,\nстатусы осмотра и очередь задач")
+
+    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранит фото ДТП и подписи")
 }
- 
+
+' Внешние системы (серые)
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+
 ' === СВЯЗИ ===
- 
-' Внешние взаимодействия
-Rel(expert, terminal, "Загрузка фотографий\nрезультатов осмотра и информации")
-Rel(client, terminal, "Подпись")
-Rel(client, api, "Электронный протокол осмотра", "PDF")
- 
-' Внутренние взаимодействия (внутри системы)
-Rel(terminal, api, "Отправка результатов осмотра", "HTTPS, JSON")
-Rel(api, object_storage, "Сохранение фото и подписей", "HTTPS, JSON")
-Rel(api, worker, "Создание задач на обработку")
-Rel(api, database, "Чтение и запись актов фиксации", "HTTPS, JSON")
-Rel(api, ais_osago, "Проверка наличия ОСАГО", "HTTPS")
- 
-' Взаимодействия Worker
-Rel(worker, database, "Забирает задачи в статусе new/pending sql")
-Rel(worker, object_storage, "Чтение фото и подписей", "HTTPS")
-Rel(worker, ais_osago, "Повторный запрос/регистрация при сбоях", "HTTPS, JSON")
-Rel(worker, email_sys, "Запрос на отправку протокола", "HTTPS")
- 
-' ПУНКТИРНАЯ стрелка от E-mail системы к Клиенту
-Rel(email_sys, client, "Отправка электронного протокола осмотра", $tags="пунктир")
- 
+
+' Диспетчер -> Web App
+Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус")
+
+' Аварийный эксперт -> Web App
+Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП")
+
+' Клиент -> Web App (подпись протокола на планшете эксперта)
+Rel(client, web_app, "Ставит электронную подпись\nна протоколе осмотра")
+
+' Web App -> API
+Rel(web_app, api, "REST/HTTPS JSON — отправка\nрезультатов осмотра")
+
+' API -> Database
+Rel(api, database, "Читает и записывает акты фиксации\nи статусы осмотра, SQL")
+
+' API -> Object Storage
+Rel(api, object_storage, "Сохраняет фото\nи подписи, S3 API")
+
+' API -> АИС ОСАГО
+Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON")
+
+' Worker -> Database (поллинг очереди задач)
+Rel(worker, database, "Читает и обновляет\nстатусы задач, SQL")
+
+' Worker -> Object Storage
+Rel(worker, object_storage, "Читает фото и подписи\nдля протокола, S3 API")
+
+' Worker -> АИС ОСАГО (пунктир — повтор при сбое)
+Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", $tags="пунктир")
+
+' Worker -> E-mail система (пунктир)
+Rel(worker, email_sys, "Отправляет протокол\nосмотра", $tags="пунктир")
+
+' E-mail система -> Клиент (пунктир)
+Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", $tags="пунктир")
+
+' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
+
+' Три актора сверху в ряд
+dispatcher -[hidden]right- expert
+expert -[hidden]right- client
+dispatcher -[hidden]down- web_app
+
+' Контейнеры внутри boundary
+web_app -[hidden]down- api
+api -[hidden]down- database
+database -[hidden]right- object_storage
+database -[hidden]down- worker
+
+' Внешние системы внизу
+fixation_system -[hidden]down- ais_osago
+ais_osago -[hidden]right- email_sys
+
 @enduml
