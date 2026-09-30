@@ -1,92 +1,92 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title КЛИЕНТ C4 CONTAINER
+title Сервис оформления ОСАГО для физлиц. C4 Container
 
-' === НАСТРОЙКА ЦВЕТОВ (как в Context) ===
+' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddSystemTag("фиолетовый_сервис", $bgColor="#B39DDB", $borderColor="#9575CD", $fontColor="#000000")
-AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
+AddBoundaryTag("фиолетовый_сервис", $bgColor="#EDE7F6", $borderColor="#9575CD", $fontColor="#000000")
+AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
 ' === ЭЛЕМЕНТЫ ===
 
-Person(client, "Клиент", "Пользователь, оформляющий полис")
+Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса")
+Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
+Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
 
-' Центральный сервис (фиолетовый, как ИС ОСАГО в контексте)
-System_Boundary(osago_service, "Сервис оформления ОСАГО для физлиц") {
+System_Boundary(osago_service, "Сервис оформления ОСАГО для физлиц", $tags="фиолетовый_сервис") {
 
-    Container(web_app, "Web App", "React SPA", "Отображает формы, вводит данные, оплачивает")
-    
-    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — расчет, оформление, оплата")
-    
-    ContainerDb(database, "Database", "PostgreSQL", "Хранит данные о полисах и клиентах")
-    
-    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранит фото, подписи и документы")
-    
-    Container(worker, "Worker", "Python", "Асинхронная обработка: PDF, регистрация, отправка")
+    Container(web_app, "Web App", "React SPA", "Расчет, оформление, оплата,\nличный кабинет клиента")
+
+    Container(backoffice, "Backoffice", "React SPA", "Поиск полисов, статусы платежей,\nручной перезапуск задач")
+
+    Container(api, "API", "FastAPI", "Расчет премии, оформление, оплата,\nавторизация, ролевой доступ,\nвыдача PDF полиса")
+
+    ContainerDb(database, "Database", "PostgreSQL", "Полисы, клиенты, платежи,\nочередь задач (outbox), аудит")
+
+    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Фото, подписи и PDF полисов")
+
+    Container(worker, "Worker", "Python", "Фоновая обработка: PDF, регистрация\nдоговора, отправка писем, сверка платежей")
 }
 
 ' Внешние системы (серые, внизу)
-System_Ext(payment_sys, "Платежная система", "Внешняя система проведения платежей", $tags="внешняя_система")
-System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
-System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+System_Ext(payment_sys, "Платежная система", "Проведение платежей", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail сервис", "Почтовый сервис рассылки", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей,\nрегистрация договоров", $tags="внешняя_система")
+System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
 
 ' === СВЯЗИ ===
 
-' Клиент -> Web App
-Rel(client, web_app, "Отправляет форму, вводит данные,\nоплачивает")
+' Персоны
+Rel(guest, web_app, "Рассчитывает стоимость\nбез регистрации", "HTTPS")
+Rel(client, web_app, "Вводит данные, загружает фото,\nоплачивает, скачивает полис", "HTTPS")
+Rel(support, backoffice, "Ищет полисы, смотрит статусы,\nперезапускает задачи", "HTTPS")
 
-' Web App -> API
-Rel(web_app, api, "REST/HTTPS JSON — расчет, оформление,\nоплата")
+' Фронтенды -> API
+Rel(web_app, api, "Расчет, оформление, оплата,\nскачивание полиса", "REST/HTTPS, JSON")
+Rel(backoffice, api, "Поиск полисов,\nуправление задачами", "REST/HTTPS, JSON")
 
-' API -> Database
-Rel(api, database, "Читает и записывает данные\nполисов и клиентов")
+' API -> внутренние хранилища
+Rel(api, database, "Читает и записывает данные полисов\nи клиентов, ставит задачи в outbox", "SQL")
+Rel(api, object_storage, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "S3 API")
 
-' API -> Object Storage
-Rel(api, object_storage, "Сохраняет и читает\nфото и подписи")
+' API -> внешние системы (синхронно)
+Rel(api, sms_sys, "Отправляет одноразовый код\nдля авторизации клиента", "HTTPS, JSON")
+Rel(api, payment_sys, "Создает платежную сессию", "HTTPS, JSON")
+Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
+Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
 
-' API -> E-mail система
-Rel(api, email_sys, "Отправляет сведения на\nполис и чека")
+' Worker -> внутренние хранилища
+Rel(worker, database, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы", "SQL")
+Rel(worker, object_storage, "Читает фото и подписи,\nсохраняет PDF полиса", "S3 API")
 
-' API -> Платежная система
-Rel(api, payment_sys, "HTTP(S), JSON Создает платежную сессию")
-Rel(api, payment_sys, "HTTP(S), Webhook об оплате")
-
-' API -> АИС ОСАГО
-Rel(api, ais_osago, "HTTP(S), JSON Передача КЗМ, регистрация\nполиса")
-
-' Worker -> Database
-Rel(worker, database, "Забирает задачи в статусе\nnew/pending sql")
-
-' Worker -> Object Storage
-Rel(worker, object_storage, "Читает фото и подписи\nдля обработки")
-
-' Worker -> АИС ОСАГО (пунктир)
-Rel(worker, ais_osago, "HTTP(S), JSON Повторно регистрирует полис\n(при ошибке/таймауте)", $tags="пунктир")
-
-' Worker -> Платежная система (пунктир)
-Rel(worker, payment_sys, "HTTP(S), JSON Проверяет зависшие платежи\n(по расписанию)", $tags="пунктир")
-
-' E-mail система -> Клиент (пунктир)
-Rel(email_sys, client, "Доставка письма со ссылкой на полис и\nчек", $tags="пунктир")
-
-' Worker -> E-mail система (пунктир)
-Rel(worker, email_sys, "Повторная отправка письма (при сбое)", $tags="пунктир")
+' Worker -> внешние системы (асинхронно, пунктир)
+Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, email_sys, "Отправляет клиенту письмо со ссылкой\nна полис и чек (повтор при сбое)", "SMTP / HTTPS", $tags="пунктир")
 
 ' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
 
-' Клиент сверху, Web App под ним
-client -[hidden]down- web_app
+' Персоны в один ряд
+guest -[hidden]right- client
+client -[hidden]right- support
 
-' API в центре, базы данных внутри boundary
+' Фронтенды под своими персонами
+client -[hidden]down- web_app
+support -[hidden]down- backoffice
+web_app -[hidden]right- backoffice
+
+' Ядро
 web_app -[hidden]down- api
 api -[hidden]down- database
 database -[hidden]right- object_storage
 database -[hidden]down- worker
 
-' Внешние системы внизу (как в контексте)
+' Внешние системы внизу
 osago_service -[hidden]down- payment_sys
 payment_sys -[hidden]right- email_sys
 email_sys -[hidden]right- ais_osago
+ais_osago -[hidden]right- sms_sys
 
+SHOW_LEGEND()
 @enduml
