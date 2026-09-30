@@ -1,7 +1,7 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title Сервис оформления ОСАГО для физлиц. C4 Container
+title Информационная система оформления ОСАГО (ИС ОСАГО). Container
 
 ' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
@@ -14,7 +14,7 @@ Person(guest, "Гость", "Неавторизованный посетител
 Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
 Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
 
-System_Boundary(osago_service, "Сервис оформления ОСАГО для физлиц", $tags="фиолетовый_сервис") {
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)", $tags="фиолетовый_сервис") {
 
     Container(web_app, "Web App", "React SPA", "Расчет, оформление, оплата,\nличный кабинет клиента")
 
