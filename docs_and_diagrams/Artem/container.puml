@@ -5,12 +5,13 @@ title Информационная система оформления ОСАГ�
 
 ' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("гость_серый", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddBoundaryTag("фиолетовый_сервис", $bgColor="#EDE7F6", $borderColor="#9575CD", $fontColor="#000000")
 AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
 ' === ЭЛЕМЕНТЫ ===
 
-Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса")
+Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="гость_серый")
 Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
 Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
 
@@ -22,9 +23,11 @@ System_Boundary(osago_service, "Информационная система оф
 
     Container(api, "API", "FastAPI", "Расчет премии, оформление, оплата,\nавторизация, ролевой доступ,\nвыдача PDF полиса")
 
-    ContainerDb(database, "Database", "PostgreSQL", "Полисы, клиенты, платежи,\nочередь задач (outbox), аудит")
+    ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права доступа (RBAC),\nклиенты, номера полисов")
 
-    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Фото, подписи и PDF полисов")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Журнал событий аудита, транзакции, платежи,\nочередь асинхронных задач (outbox)")
+
+    ContainerDb(bd_files, "BD_FILES", "MongoDB", "Фото, подписи и файлы документов\n(PDF полисов)")
 
     Container(worker, "Worker", "Python", "Фоновая обработка: PDF, регистрация\nдоговора, отправка писем, сверка платежей")
 }
@@ -47,8 +50,9 @@ Rel(web_app, api, "Расчет, оформление, оплата,\nскачи
 Rel(backoffice, api, "Поиск полисов,\nуправление задачами", "REST/HTTPS, JSON")
 
 ' API -> внутренние хранилища
-Rel(api, database, "Читает и записывает данные полисов\nи клиентов, ставит задачи в outbox", "SQL")
-Rel(api, object_storage, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "S3 API")
+Rel(api, db_users, "Читает и записывает данные клиентов,\nролей и полисов", "SQL")
+Rel(api, db_audit, "Записывает события аудита и транзакции,\nставит задачи в outbox (с полным payload)", "SQL")
+Rel(api, bd_files, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "MongoDB driver")
 
 ' API -> внешние системы (синхронно)
 Rel(api, sms_sys, "Отправляет одноразовый код\nдля авторизации клиента", "HTTPS, JSON")
@@ -57,8 +61,8 @@ Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS
 Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
 
 ' Worker -> внутренние хранилища
-Rel(worker, database, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы", "SQL")
-Rel(worker, object_storage, "Читает фото и подписи,\nсохраняет PDF полиса", "S3 API")
+Rel(worker, db_audit, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы,\nсверяет оплаты без задач", "SQL")
+Rel(worker, bd_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
 
 ' Worker -> внешние системы (асинхронно, пунктир)
 Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")
@@ -71,16 +75,17 @@ Rel(worker, email_sys, "Отправляет клиенту письмо со с
 guest -[hidden]right- client
 client -[hidden]right- support
 
-' Фронтенды под своими персонами
+' Верхний ряд внутри boundary: фронтенды под своими персонами
 client -[hidden]down- web_app
 support -[hidden]down- backoffice
 web_app -[hidden]right- backoffice
 
-' Ядро
+' Нижний ряд внутри boundary: ядро в одну строку
 web_app -[hidden]down- api
-api -[hidden]down- database
-database -[hidden]right- object_storage
-database -[hidden]down- worker
+api -[hidden]right- db_users
+db_users -[hidden]right- db_audit
+db_audit -[hidden]right- bd_files
+bd_files -[hidden]right- worker
 
 ' Внешние системы внизу
 osago_service -[hidden]down- payment_sys
@@ -88,5 +93,4 @@ payment_sys -[hidden]right- email_sys
 email_sys -[hidden]right- ais_osago
 ais_osago -[hidden]right- sms_sys
 
-SHOW_LEGEND()
 @enduml
