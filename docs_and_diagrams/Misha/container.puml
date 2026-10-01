@@ -5,7 +5,7 @@ title Контур финансового контроля и верификац
 
 ' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddBoundaryTag("фиолетовый_сервис", $bgColor="#EDE7F6", $borderColor="#9575CD", $fontColor="#000000")
+
 AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
 AddPersonTag("внешний", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
@@ -16,7 +16,7 @@ Person(accountant, "Бухгалтер", "Финансовый специали�
 Person(agent, "Страховой агент", "Специалист, оформляющий полисы\nи передающий данные по комиссии (КВ)")
 Person(client, "Застрахованный клиент", "Застрахованное лицо,\nсовершающее оплату полиса", $tags="внешний")
 
-System_Boundary(finance_service, "Информационная система оформления ОСАГО (ИС ОСАГО)", $tags="фиолетовый_сервис") {
+System_Boundary(finance_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
     Container(web_app, "Web App(React SPA)", "React, TypeScript", "Интерфейс панели аналитики для отображения графиков прибыльности, маржинальности, тарифов и статусов транзакций шлюзов")
     Container(api, "API (FastAPI)", "Python, FastAPI, Docker", "Обработка REST-запросов, валидация маржи и актов сверки по шлюзам.")
     ContainerDb(database, "BD_TARIFS", "PostgreSQL", "Хранит тарифы сетки, коэффициенты и правила рассчета")

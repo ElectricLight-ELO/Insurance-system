@@ -6,7 +6,6 @@ title Информационная система оформления ОСАГ�
 ' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddPersonTag("гость_серый", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddBoundaryTag("фиолетовый_сервис", $bgColor="#EDE7F6", $borderColor="#9575CD", $fontColor="#000000")
 AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
 ' === ЭЛЕМЕНТЫ ===
@@ -15,7 +14,7 @@ Person(guest, "Гость", "Неавторизованный посетител
 Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
 Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
 
-System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)", $tags="фиолетовый_сервис") {
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Расчет, оформление, оплата,\nличный кабинет клиента")
 
