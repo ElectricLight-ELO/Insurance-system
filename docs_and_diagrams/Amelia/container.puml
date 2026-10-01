@@ -1,11 +1,10 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title АДМИНИСТРАТОР C4 CONTAINER
+title АДМИНИСТРАТОР C4 CONTAINER (Microservices DB Partitioning)
 
-' === НАСТРОЙКА ЦВЕТОВ (как в Context) ===
+' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddSystemTag("фиолетовый_сервис", $bgColor="#B39DDB", $borderColor="#9575CD", $fontColor="#000000")
 AddPersonTag("сотрудник", $bgColor="#438DD5", $borderColor="#316CA5", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
@@ -13,15 +12,17 @@ AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
 Person(admin, "Администратор", "Системный администратор ИС ОСАГО,\nимеет права всех ролей", $tags="сотрудник")
 
-System_Boundary(osago_service, "ИС ОСАГО — личный кабинет администратора") {
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Админ-панель: пользователи, роли,\nтарифы, журнал аудита, задачи")
 
-    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — авторизация (RBAC),\nадминистрирование, аудит действий")
+    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — авторизация (RBAC),\nадминистрирование, управление тарифами")
 
-    ContainerDb(database, "Database", "PostgreSQL", "Хранит пользователей, роли, тарифы,\nжурнал аудита и очередь задач")
-
-    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранит фото ДТП, подписи и документы")
+    ' === РАЗДЕЛЕННЫЕ БАЗЫ ДАННЫХ ===
+    ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC), номер полисов")
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Хранит тарифные сетки, коэффициенты и правила расчета")
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал событий аудита и очередь асинхронных задач")
+    ContainerDb(object_storage, "BD_FILES", "MongoDB", "Хранит фото ДТП, подписи и файлы документов")
 
     Container(worker, "Worker", "Python", "Асинхронная обработка: повтор сбойных\nзадач, проверка интеграций, отчеты")
 }
@@ -33,37 +34,32 @@ System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная
 
 ' === СВЯЗИ ===
 
-' Администратор -> Web App
+' Пользователь -> Frontend -> Backend
 Rel_D(admin, web_app, "Управляет пользователями и ролями,\nнастраивает тарифы, смотрит аудит")
-
-' Web App -> API
 Rel_D(web_app, api, "REST/HTTPS JSON — администрирование,\nуправление задачами")
 
-' API -> Database
-Rel_L(api, database, "Читает и записывает пользователей,\nроли, тарифы и журнал аудита")
-
-' API -> Object Storage
-Rel_D(api, object_storage, "Просматривает и удаляет\nдокументы и фото")
+' API -> Разделенные базы данных
+Rel(api, db_users, "Аутентификация, управление\nпользователями и ролями,номер полиса (SQL)")
+Rel(api, db_tarifs, "Чтение и изменение\nтарифов и коэффициентов (SQL)")
+Rel(api, db_audit, "Запись событий безопасности\nи системных логов (SQL)")
+Rel_D(api, object_storage, "Просматривает и удаляет\nдокументы и фото (GridFS/BSON)")
 
 ' API -> Worker
-Rel_R(api, worker, "Ставит задачи на повторную\nобработку и отчеты")
+Rel_R(api, worker, "Ставит задачи на повторную\nобработку и формирование отчетов")
 
-' Worker -> Database
-Rel(worker, database, "Забирает задачи в статусе\nfailed/pending sql")
-
-' Worker -> Object Storage
+' Worker -> Базы данных
+Rel(worker, db_audit, "Забирает задачи из очереди\nв статусе pending/failed (SQL)")
 Rel(worker, object_storage, "Удаляет устаревшие файлы\nпо политике хранения")
 
-' Worker -> внешние системы (пунктир — по расписанию или команде администратора)
-Rel_R(worker, payment_sys, "HTTP(S), JSON Проверяет зависшие\nплатежи (по расписанию)", $tags="пунктир")
-Rel_R(worker, ais_osago, "HTTP(S), JSON Повторно регистрирует\nполис (по команде администратора)", $tags="пунктир")
+' Worker -> внешние системы
+Rel_R(worker, payment_sys, "HTTP(S), JSON — проверяет зависшие\nплатежи (по расписанию)", $tags="пунктир")
+Rel_R(worker, ais_osago, "HTTP(S), JSON — повторно регистрирует\nполис (по команде администратора)", $tags="пунктир")
 Rel_R(worker, email_sys, "Отправляет уведомления\nо сбоях и отчеты", $tags="пунктир")
 
-' E-mail система -> Администратор (пунктир)
+' E-mail система -> Администратор
 Rel_U(email_sys, admin, "Доставка уведомлений о сбоях\nи отчетов о работе системы", $tags="пунктир")
 
 ' === УПРАВЛЕНИЕ LAYOUT ===
-' Администратор сверху; ряд Database — API — Worker; внешние системы справа столбиком
 Lay_D(payment_sys, ais_osago)
 Lay_D(ais_osago, email_sys)
 
