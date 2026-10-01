@@ -1,0 +1,73 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контур финансового контроля и верификации маржи. Container
+
+' === НАСТРОЙКА ЦВЕТОВ ===
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddBoundaryTag("фиолетовый_сервис", $bgColor="#EDE7F6", $borderColor="#9575CD", $fontColor="#000000")
+AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+' === ЭЛЕМЕНТЫ (Три актора) ===
+Person(accountant, "Бухгалтер", "Финансовый специалист страховой компании,\nпроверяет маржу, подписывает отчеты")
+Person(agent, "Страховой агент", "Специалист, оформляющий полисы\nи передающий данные по комиссии (КВ)")
+Person(client, "Клиент", "Застрахованное лицо,\nсовершающее оплату полиса")
+
+System_Boundary(finance_service, "Контур финансового контроля и верификации маржи", $tags="фиолетовый_сервис") {
+
+    Container(web_app, "Web App (React SPA)", "React, TypeScript", "Интерфейс панели аналитики для отображения графиков прибыльности, маржинальности, тарифов и статусов транзакций шлюзов.")
+
+    Container(api, "API (FastAPI)", "Python, FastAPI, Docker", "Обработка REST-запросов, валидация маржи и актов сверки по шлюзам.")
+
+    ContainerDb(database, "Финансовая база данных", "PostgreSQL", "Содержит транзакции, историю расчетов и данные по полисам.")
+
+    ContainerDb(queue_db, "Финансовая очередь задач", "Redis / DB", "Очередь задач для фонового пересчета маржи и сверок.")
+
+    Container(worker, "Аналитический воркер", "Celery, Python", "Фоновый просчет маржи периода, сверка со шлюзами и генерация отчетов.")
+}
+
+' Внешние системы (серые, внизу)
+System_Ext(payment_sys, "Платежная система", "Проведение платежей, чистые поступления, комиссии", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО", "Вывод актуальных тарифов", $tags="внешняя_система")
+
+' === СВЯЗИ ===
+
+' Персоны -> Система
+Rel(accountant, web_app, "Запрашивает фин. статистику,\nподписывает отчеты, проверяет маржу", "HTTPS")
+Rel(agent, api, "Передает данные о проданных полисах\nи размере агентской комиссии (КВ)", "REST/HTTPS")
+Rel(client, payment_sys, "Оплачивает полис", "HTTPS")
+
+' Фронтенд -> API
+Rel(web_app, api, "Получает данные дашборда,\nотправляет запросы верификации", "REST/HTTPS, JSON")
+
+' API -> внутренние хранилища
+Rel(api, database, "Читает/записывает финансовые\nтранзакции и лог отчетов", "SQL")
+Rel(api, queue_db, "Ставит задачи на фоновый\nрасчет маржи", "Redis Protocol")
+
+' API -> внешние системы (синхронно)
+Rel(api, payment_sys, "Получает отчеты о чистых поступлениях\nи списанных комиссиях", "HTTPS, JSON")
+Rel(api, ais_osago, "Запрашивает актуальные тарифы", "HTTPS, JSON")
+
+' Worker -> внутренние хранилища
+Rel(worker, queue_db, "Забирает задачи из очереди", "Redis Protocol")
+Rel(worker, database, "Читает данные для расчетов,\nзаписывает результаты маржи", "SQL")
+
+' Worker -> внешние системы (асинхронно, пунктир)
+Rel(worker, payment_sys, "Сверяет зависшие транзакции\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
+
+' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
+
+accountant -[hidden]right- agent
+agent -[hidden]right- client
+
+accountant -[hidden]down- web_app
+web_app -[hidden]down- api
+api -[hidden]down- queue_db
+database -[hidden]right- queue_db
+queue_db -[hidden]down- worker
+
+finance_service -[hidden]down- payment_sys
+payment_sys -[hidden]right- ais_osago
+
+SHOW_LEGEND()
+@enduml

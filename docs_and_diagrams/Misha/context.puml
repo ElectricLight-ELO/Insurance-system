@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title БУХГАЛТЕР C4 CONTEXT
+
+' Создаем тег "внешняя" для серых систем
+AddSystemTag("внешняя", $bgColor="#A9A9A9", $borderColor="#8A8A8A")
+
+' Явно определяем тег "пунктир" со стилем пунктирной линии
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#707070")
+
+' Три актора
+Person(accountant, "Бухгалтер", "Финансовый специалист страховой компании")
+Person(agent, "Страховой агент", "Специалист, оформляющий полисы")
+Person(client, "Клиент", "Застрахованное лицо / плательщик")
+
+' Центральная система из твоего Miro
+System(analytics_panel, "Панель аналитики", "Модуль финансовой отчётности и учёта комиссий")
+
+' Внешние системы из твоего Miro
+System_Ext(payment_sys, "Платежная система", "Внешняя система проведения платежей", $tags="внешняя")
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя")
+
+' Связи строго по твоему Miro + третий актор
+Rel(agent, analytics_panel, "Передача данных о проданных полисах\nи размере агентской комиссии (КВ)")
+Rel(accountant, analytics_panel, "Запрос финансовой статистики за период,\nподписывание отчетов и проверка")
+Rel(client, payment_sys, "Совершает оплату по полису")
+
+Rel(analytics_panel, payment_sys, "Передача отчетов о чистых поступлениях\nи списанных комиссиях")
+Rel(ais_osago, analytics_panel, "Вывод тарифов")
+
+Rel(analytics_panel, accountant, "Вывод расчета маржи", $tags="пунктир")
+
+@enduml
