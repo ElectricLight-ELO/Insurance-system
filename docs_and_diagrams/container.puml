@@ -1,0 +1,146 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title ОБЩАЯ C4 CONTAINER — ИС ОСАГО/КАСКО
+
+' ============================================================
+' Объединённая диаграмма контейнеров из диаграмм:
+'   Artem  — модуль оформления полисов (клиентский)
+'   Amelia — модуль администрирования
+'   Dima   — модуль фиксации ДТП
+'   Misha  — контур финансового контроля и верификации маржи
+'   Nikita — сервис оформления полисов (работа агентов)
+' ============================================================
+
+' === НАСТРОЙКА ЦВЕТОВ ===
+
+' Серые внешние системы
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+
+' Тёмно-синие люди (клиенты и сотрудники)
+AddPersonTag("человек", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
+AddPersonTag("гость", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+' Пунктирная линия
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
+
+' === ЭЛЕМЕНТЫ ===
+
+' --- Люди (все тёмно-синие) ---
+Person(guest, "Гость", "Неавторизованный посетитель:\nизучает тарифы и считает премию", $tags="гость")
+Person(client, "Клиент", "Страхователь: оформляет полис,\nучастник ДТП", $tags="человек")
+Person(agent, "Страховой агент", "Оформляет полисы клиентам,\nведет базу страхователей", $tags="человек")
+Person(manager, "Менеджер отдела продаж", "Контролирует работу агентов,\nутверждает сложные случаи", $tags="человек")
+Person(admin, "Администратор", "Системный администратор ИС ОСАГО,\nимеет права всех ролей", $tags="человек")
+Person(accountant, "Бухгалтер", "Контролирует оплаты и маржу,\nформирует счета и закрывающие акты", $tags="человек")
+Person(auditor, "Сотрудник ИБ", "Изучает журнал аудита,\nрасследует инциденты", $tags="человек")
+Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи", $tags="человек")
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="человек")
+Person(expert, "Аварийный эксперт", "Выезжает на место ДТП,\nфотографирует осмотр", $tags="человек")
+
+' --- Центральная система ---
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+
+    Container(web_app, "Web App", "React SPA", "Личный кабинет клиента, оформление и оплата полисов;\nрабочие места: фиксация ДТП, администрирование, аналитика маржи")
+
+    Container(backoffice, "Backoffice", "React SPA", "Рабочее место оператора поддержки:\nпоиск полисов, статусы платежей, перезапуск задач")
+
+    Container(api, "API", "FastAPI", "REST/HTTPS JSON — расчет и оформление полисов,\nфиксация ДТП, RBAC, платежи, проверка КБМ")
+
+    Container(worker, "Worker", "Python + Celery", "Асинхронная обработка: PDF-полисы и протоколы,\nрегистрация в АИС ОСАГО, сверка платежей, маржа, рассылки")
+
+    ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Пользователи, роли, права (RBAC),\nклиенты и страхователи")
+
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки, коэффициенты\nи правила расчета")
+
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал аудита, транзакции, платежи\nи очередь задач (outbox)")
+
+    ContainerDb(db_files, "BD_FILES", "MongoDB", "Фото ДТП, подписи, сканы\nдокументов и PDF-полисы")
+}
+
+' --- Внешние системы (серые) ---
+System_Ext(payment_sys, "Платежная система", "Внешняя система проведения платежей", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+
+' === СВЯЗИ ===
+
+' Люди -> фронтенды
+Rel(guest, web_app, "Считает премию в калькуляторе\nбез регистрации", "HTTPS")
+Rel(client, web_app, "Оформляет и оплачивает полис, скачивает полис,\nподписывает протокол осмотра", "HTTPS")
+Rel(agent, web_app, "Оформляет полисы от имени клиентов,\nпередает данные по комиссии (КВ)", "HTTPS")
+Rel(manager, web_app, "Смотрит отчёты по продажам, управляет\nагентами, утверждает сложные случаи", "HTTPS")
+Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта", "HTTPS")
+Rel(expert, web_app, "Загружает фото осмотра\nи сведения о ДТП", "HTTPS")
+Rel(admin, web_app, "Управляет пользователями и ролями,\nнастраивает тарифы, смотрит аудит", "HTTPS")
+Rel(accountant, web_app, "Запрашивает фин. статистику,\nпроверяет маржу, подписывает отчеты", "HTTPS")
+Rel(auditor, web_app, "Изучает журнал аудита,\nрасследует инциденты", "HTTPS")
+Rel(support, backoffice, "Ищет полисы, смотрит статусы,\nперезапускает зависшие задачи", "HTTPS")
+
+' Фронтенды -> API
+Rel(web_app, api, "REST/HTTPS, JSON")
+Rel(backoffice, api, "REST/HTTPS, JSON")
+
+' API -> базы данных
+Rel(api, db_users, "Аутентификация, RBAC, чтение и запись\nклиентов и полисов", "SQL")
+Rel(api, db_tarifs, "Чтение и изменение тарифов\nи коэффициентов", "SQL")
+Rel(api, db_audit, "Запись событий аудита, транзакций\nи задач в outbox", "SQL")
+Rel(api, db_files, "Сохраняет фото, подписи, сканы\nи PDF-полисы", "MongoDB driver")
+
+' API -> внешние системы (синхронно)
+Rel(api, sms_sys, "Отправляет одноразовые коды\nавторизации", "HTTPS, JSON")
+Rel(api, payment_sys, "Создает платежную сессию", "HTTPS, JSON")
+Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
+Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
+
+' Worker -> базы данных (поллинг очереди outbox)
+Rel(worker, db_audit, "Забирает задачи из outbox,\nобновляет статусы", "SQL")
+Rel(worker, db_tarifs, "Читает данные и записывает\nрезультаты расчета маржи", "SQL")
+Rel(worker, db_files, "Читает фото и подписи,\nсохраняет PDF-полисы и протоколы", "MongoDB driver")
+
+' Worker -> внешние системы (асинхронно, пунктир)
+Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, email_sys, "Отправляет клиенту письмо со ссылкой\nна полис и чек (повтор при сбоe)", "SMTP / HTTPS", $tags="пунктир")
+
+' E-mail система -> получатели (пунктир)
+Rel(email_sys, client, "Доставка письма со ссылкой на полис,\nчеком и протоколом осмотра", $tags="пунктир")
+Rel(email_sys, accountant, "Доставка счетов\nи закрывающих актов", $tags="пунктир")
+Rel(email_sys, admin, "Доставка уведомлений о сбоях\nи отчетов", $tags="пунктир")
+
+' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
+
+' Люди: два ряда сверху
+guest -[hidden]right- client
+client -[hidden]right- agent
+agent -[hidden]right- manager
+manager -[hidden]right- support
+
+admin -[hidden]right- accountant
+accountant -[hidden]right- auditor
+auditor -[hidden]right- dispatcher
+dispatcher -[hidden]right- expert
+
+guest -[hidden]down- admin
+manager -[hidden]down- expert
+
+' Центральная система под людьми
+admin -[hidden]down- web_app
+support -[hidden]down- backoffice
+
+' Контейнеры внутри boundary
+web_app -[hidden]right- backoffice
+web_app -[hidden]down- api
+api -[hidden]down- db_users
+db_users -[hidden]right- db_tarifs
+db_tarifs -[hidden]right- db_audit
+db_audit -[hidden]right- db_files
+db_users -[hidden]down- worker
+
+' Внешние системы снизу в ряд
+osago_service -[hidden]down- payment_sys
+payment_sys -[hidden]right- email_sys
+email_sys -[hidden]right- sms_sys
+sms_sys -[hidden]right- ais_osago
+
+@enduml
