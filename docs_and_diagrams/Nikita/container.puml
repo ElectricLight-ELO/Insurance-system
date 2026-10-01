@@ -3,19 +3,20 @@
 
 title СЕРВИС ОФОРМЛЕНИЯ ПОЛИСОВ ОСАГО C4 CONTAINER
 
-' === НАСТРОЙКА ЦВЕТОВ (как в примере) ===
+' === НАСТРОЙКА ЦВЕТОВ ===
+' Темно-синий цвет для всех пользователей (акторов)
+AddPersonTag("пользователь", $bgColor="#003366", $borderColor="#002244", $fontColor="#FFFFFF")
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddPersonTag("сотрудник", $bgColor="#438DD5", $borderColor="#316CA5", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
 ' === ЭЛЕМЕНТЫ ===
 
-Person(agent, "Страховой агент", "Специалист страховой компании,\nработающий с клиентами", $tags="сотрудник")
-Person(client, "Клиент", "Участник ДТП (застрахованное лицо\nили потерпевшее третье лицо)")
-Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nутверждение сложных случаев", $tags="сотрудник")
+Person(agent, "Страховой агент", "Специалист страховой компании,\nработающий с клиентами", $tags="пользователь")
+Person(client, "Клиент", "Участник ДТП (застрахованное лицо\nили потерпевшее третье лицо)", $tags="пользователь")
+Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nутверждение сложных случаев", $tags="пользователь")
 
 ' Центральный сервис
-System_Boundary(osago_service, "Сервис оформления полисов ОСАГО") {
+System_Boundary(osago_service, "Информационная система оформления полисов ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Клиентское веб-приложение. Предоставляет интерфейс для агента,\nотправляет REST/HTTPS+JSON запросы к API")
 
@@ -23,7 +24,9 @@ System_Boundary(osago_service, "Сервис оформления полисов
 
     Container(worker, "Worker", "Celery / Python / Redis", "Асинхронная обработка:\nгенерация PDF-протокола, отправка email,\nповторная регистрация полиса при сбое")
 
-    ContainerDb(database, "Database", "PostgreSQL", "Хранение структурированных данных:\nзаписи клиентов, полисов ОСАГО, статусов задач")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL / Redis", "Журнал событий аудита и очередь асинхронных задач")
+    
+    ContainerDb(db_dtp, "DB_DTP", "PostgreSQL / Object Storage", "Хранит фото ДТП, подписи и файлы документов")
 }
 
 ' Внешние системы (серые)
@@ -44,14 +47,20 @@ Rel(manager, web_app, "Просматривает отчёты по продаж
 ' Web App -> API
 Rel(web_app, api, "REST/HTTPS+JSON — проверка корректности\nи актуальности данных")
 
-' API -> Database
-Rel(api, database, "Чтение/запись полисов и платежей, SQL")
+' API -> DB_AUDIT
+Rel(api, db_audit, "Чтение/запись полисов, платежей,\nжурнал аудита, SQL")
+
+' API -> DB_DTP
+Rel(api, db_dtp, "Загрузка и чтение файлов документов,\nподписей, фото ДТП")
 
 ' API -> Worker
 Rel(api, worker, "Создание задач на асинхронную обработку")
 
-' Worker -> Database (поллинг очереди задач)
-Rel(worker, database, "Читает и обновляет\nстатусы задач, SQL")
+' Worker -> DB_AUDIT (поллинг очереди задач)
+Rel(worker, db_audit, "Читает и обновляет\nстатусы задач и журнал аудита")
+
+' Worker -> DB_DTP (для прикрепления файлов к письмам)
+Rel(worker, db_dtp, "Чтение файлов для прикрепления\nк email-уведомлениям", $tags="пунктир")
 
 ' Worker -> АИС ОСАГО (пунктир — повтор при сбое)
 Rel(worker, ais_osago, "Повторная регистрация полиса\nпри ошибке/таймауте", $tags="пунктир")
@@ -76,8 +85,9 @@ agent -[hidden]down- web_app
 
 ' Контейнеры внутри boundary
 web_app -[hidden]right- api
-api -[hidden]down- database
-database -[hidden]right- worker
+api -[hidden]down- db_audit
+db_audit -[hidden]right- db_dtp
+db_audit -[hidden]down- worker
 
 ' Внешние системы внизу
 osago_service -[hidden]down- ais_osago
