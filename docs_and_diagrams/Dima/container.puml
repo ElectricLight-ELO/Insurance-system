@@ -3,16 +3,16 @@
 
 title АВАРИЙНЫЙ ЭКСПЕРТ C4 CONTAINER
 
-' === НАСТРОЙКА ЦВЕТОВ (как в Context) ===
+' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddPersonTag("сотрудник", $bgColor="#438DD5", $borderColor="#316CA5", $fontColor="#FFFFFF")
+AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
 ' === ЭЛЕМЕНТЫ ===
 
-Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="сотрудник")
-Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="сотрудник")
-Person(client, "Клиент", "Участник ДТП")
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="персона_синяя")
+Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="персона_синяя")
+Person(client, "Клиент", "Участник ДТП", $tags="персона_синяя")
 
 ' Центральный сервис (модуль фиксации ДТП в составе ИС ОСАГО)
 System_Boundary(fixation_system, "ИС ОСАГО — модуль фиксации ДТП") {
@@ -23,9 +23,9 @@ System_Boundary(fixation_system, "ИС ОСАГО — модуль фиксац�
 
     Container(worker, "Worker", "Python", "Асинхронная обработка:\nгенерация PDF-протокола, рассылка")
 
-    ContainerDb(database, "Database", "PostgreSQL", "Хранит заявления о ДТП, акты фиксации,\nстатусы осмотра и очередь задач")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, акты фиксации, статусы осмотра,\nжурнал аудита и очередь асинхронных задач")
 
-    ContainerDb(object_storage, "Object Storage", "S3 / MinIO", "Хранит фото ДТП и подписи")
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Хранит фото ДТП, подписи\nи файлы документов")
 }
 
 ' Внешние системы (серые)
@@ -34,56 +34,39 @@ System_Ext(email_sys, "E-mail система", "Внутренняя систе�
 
 ' === СВЯЗИ ===
 
-' Диспетчер -> Web App
 Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус")
-
-' Аварийный эксперт -> Web App
 Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП")
-
-' Клиент -> Web App (подпись протокола на планшете эксперта)
 Rel(client, web_app, "Ставит электронную подпись\nна протоколе осмотра")
 
-' Web App -> API
 Rel(web_app, api, "REST/HTTPS JSON — отправка\nрезультатов осмотра")
 
-' API -> Database
-Rel(api, database, "Читает и записывает акты фиксации\nи статусы осмотра, SQL")
-
-' API -> Object Storage
-Rel(api, object_storage, "Сохраняет фото\nи подписи, S3 API")
+' API -> базы данных
+Rel(api, db_audit, "Читает и записывает акты фиксации,\nстатусы осмотра, события аудита, SQL")
+Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driver")
 
 ' API -> АИС ОСАГО
 Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON")
 
-' Worker -> Database (поллинг очереди задач)
-Rel(worker, database, "Читает и обновляет\nстатусы задач, SQL")
+' Worker -> базы данных
+Rel(worker, db_audit, "Читает и обновляет\nстатусы задач, SQL")
+Rel(worker, db_files, "Читает фото и подписи для протокола,\nсохраняет PDF-протокол, MongoDB driver")
 
-' Worker -> Object Storage
-Rel(worker, object_storage, "Читает фото и подписи\nдля протокола, S3 API")
-
-' Worker -> АИС ОСАГО (пунктир — повтор при сбое)
+' Worker -> внешние системы (пунктир)
 Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", $tags="пунктир")
-
-' Worker -> E-mail система (пунктир)
 Rel(worker, email_sys, "Отправляет протокол\nосмотра", $tags="пунктир")
-
-' E-mail система -> Клиент (пунктир)
 Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", $tags="пунктир")
 
 ' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
 
-' Три актора сверху в ряд
 dispatcher -[hidden]right- expert
 expert -[hidden]right- client
 dispatcher -[hidden]down- web_app
 
-' Контейнеры внутри boundary
 web_app -[hidden]down- api
-api -[hidden]down- database
-database -[hidden]right- object_storage
-database -[hidden]down- worker
+api -[hidden]down- db_audit
+db_audit -[hidden]right- db_files
+db_audit -[hidden]down- worker
 
-' Внешние системы внизу
 fixation_system -[hidden]down- ais_osago
 ais_osago -[hidden]right- email_sys
 

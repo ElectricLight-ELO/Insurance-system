@@ -19,10 +19,10 @@ System_Boundary(osago_service, "Информационная система оф
     Container(api, "API", "FASTAPI", "REST/HTTPS JSON — авторизация (RBAC),\nадминистрирование, управление тарифами")
 
     ' === РАЗДЕЛЕННЫЕ БАЗЫ ДАННЫХ ===
-    ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC), номер полисов")
+    ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC)")
     ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Хранит тарифные сетки, коэффициенты и правила расчета")
-    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал событий аудита, транзакций и очередь асинхронных задач")
-    ContainerDb(object_storage, "BD_FILES", "MongoDB", "Хранит фото ДТП, подписи и файлы документов")
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал событий аудита и очередь асинхронных задач")
+    ContainerDb(object_storage, "BD_DTP", "MongoDB", "Хранит фото ДТП, подписи и файлы документов")
 
     Container(worker, "Worker", "Python", "Асинхронная обработка: повтор сбойных\nзадач, проверка интеграций, отчеты")
 }
@@ -39,7 +39,7 @@ Rel_D(admin, web_app, "Управляет пользователями и рол
 Rel_D(web_app, api, "REST/HTTPS JSON — администрирование,\nуправление задачами")
 
 ' API -> Разделенные базы данных
-Rel(api, db_users, "Аутентификация, управление\nпользователями и ролями,номер полиса (SQL)")
+Rel(api, db_users, "Аутентификация, управление\nпользователями и ролями (SQL)")
 Rel(api, db_tarifs, "Чтение и изменение\nтарифов и коэффициентов (SQL)")
 Rel(api, db_audit, "Запись событий безопасности\nи системных логов (SQL)")
 Rel_D(api, object_storage, "Просматривает и удаляет\nдокументы и фото (GridFS/BSON)")
