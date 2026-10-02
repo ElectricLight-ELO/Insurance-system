@@ -6,13 +6,13 @@ title Информационная система оформления ОСАГ�
 skinparam nodesep 60
 skinparam ranksep 90
 
-' === НАСТРОЙКА ЦВЕТОВ ===
+
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddPersonTag("сотрудник", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
 AddPersonTag("внешний", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
-' === ПЕРСОНЫ ===
+
 Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="внешний")
 Person(client, "Клиент", "Участник ДТП (страхователь или потерпевший):\nподает заявку, загружает фото,\nставит подпись на протоколе осмотра", $tags="сотрудник")
 Person(payer, "Застрахованный клиент", "Застрахованное лицо,\nсовершающее оплату полиса", $tags="внешний")
@@ -41,13 +41,13 @@ System_Boundary(osago_service, "Информационная система оф
     Container(worker, "Worker", "Python / Celery", "Фоновая обработка: PDF, регистрация договора,\nписьма, сверка платежей, расчет маржи, отчеты")
 }
 
-' === ВНЕШНИЕ СИСТЕМЫ ===
+
 System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС, водителей и полиса,\nрегистрация договоров, актуальные тарифы", $tags="внешняя_система")
 System_Ext(payment_sys, "Платежная система", "Платежные сессии, webhook об оплате,\nпоступления, комиссии, сверка платежей", $tags="внешняя_система")
 System_Ext(email_sys, "E-mail система", "Рассылка и обмен письмами: полисы, чеки, протоколы,\nсчета, акты, отчеты, уведомления о сбоях", $tags="внешняя_система")
 
-' === ПЕРСОНЫ -> ФРОНТЕНДЫ ===
+
 Rel_D(guest, web_app, "Рассчитывает стоимость без регистрации", "HTTPS")
 Rel_D(client, web_app, "Вводит данные, подает заявку, загружает фото,\nскачивает полис, подписывает протокол", "HTTPS")
 Rel_D(agent, web_app, "Оформляет полисы и договоры", "HTTPS")
@@ -59,12 +59,12 @@ Rel_D(auditor, backoffice, "Изучает журнал аудита,\nрасс�
 Rel_D(accountant, backoffice, "Проверяет маржу и оплаты,\nформирует счета и акты", "HTTPS")
 Rel_D(admin, backoffice, "Управляет пользователями, ролями,\nтарифами, задачами", "HTTPS")
 
-' === ФРОНТЕНДЫ -> API ===
+
 Rel_D(web_app, api, "Расчет, оформление, оплата,\nрезультаты осмотра, скачивание полиса", "REST/HTTPS, JSON")
 Rel_D(backoffice, api, "Администрирование, тарифы, аудит,\nдашборд, управление задачами", "REST/HTTPS, JSON")
 Rel(agent, api, "Передает данные о продажах\nи комиссии (КВ)", "REST/HTTPS")
 
-' === API -> ХРАНИЛИЩА ===
+
 Rel_D(api, db_users, "Аутентификация, пользователи,\nроли, клиенты, полисы", "SQL")
 Rel_D(api, db_tarifs, "Чтение и изменение тарифов,\nзапись лога отчетов", "SQL")
 Rel_D(api, db_audit, "Аудит, транзакции, акты ДТП,\nзадачи в outbox", "SQL")
@@ -72,33 +72,33 @@ Rel_D(api, db_files, "Фото, подписи, документы; просмо
 
 Rel_R(payer, payment_sys, "Оплачивает полис", "HTTPS")
 
-' === WORKER -> ХРАНИЛИЩА ===
+
 Rel_U(worker, db_tarifs, "Читает данные для расчета,\nзаписывает результаты маржи", "SQL")
 Rel_U(worker, db_audit, "Забирает задачи из outbox,\nобновляет статусы, сверяет оплаты", "SQL")
 Rel_U(worker, db_files, "Читает фото и подписи, сохраняет PDF,\nудаляет устаревшие файлы", "MongoDB driver")
 
-' === API -> WORKER ===
+
 Rel_D(api, worker, "Ставит задачи: повтор, отчеты,\nрасчет маржи")
 
-' === API -> ВНЕШНИЕ (синхронно) ===
+
 Rel_R(api, sms_sys, "Отправляет одноразовый код\nдля авторизации", "HTTPS, JSON")
 Rel(api, ais_osago, "Запрашивает КБМ и тарифы, проверяет\nТС, водителей и наличие полиса", "HTTPS, JSON")
 Rel(api, payment_sys, "Создает платежную сессию,\nполучает отчеты о поступлениях", "HTTPS, JSON")
 Rel_U(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
 Rel(api, email_sys, "Отправляет вопросы\nи корректировки", "SMTP / HTTPS")
 
-' === WORKER -> ВНЕШНИЕ (асинхронно, пунктир) ===
+
 Rel_D(worker, ais_osago, "Регистрирует договор после оплаты (в т.ч. по команде\nадминистратора), повторная проверка полиса", "HTTPS, JSON", $tags="пунктир")
 Rel_D(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
 Rel_D(worker, email_sys, "Отправляет полисы, чеки, протоколы,\nсчета, отчеты, уведомления о сбоях", "SMTP / HTTPS", $tags="пунктир")
 
-' === E-MAIL -> ПОЛУЧАТЕЛИ ===
+
 Rel_U(email_sys, client, "Доставляет полисы, чеки,\nпротоколы осмотра", "E-mail", $tags="пунктир")
 Rel_U(email_sys, accountant, "Доставляет счета, акты,\nфинансовые отчеты", "E-mail", $tags="пунктир")
 Rel_U(email_sys, admin, "Доставляет уведомления о сбоях\nи отчеты о работе системы", "E-mail", $tags="пунктир")
 
-' === LAYOUT ===
-' Персоны одним рядом: клиентские слева, служебные справа
+
+
 Lay_R(guest, client)
 Lay_R(client, agent)
 Lay_R(agent, manager)
@@ -109,15 +109,15 @@ Lay_R(support, auditor)
 Lay_R(auditor, accountant)
 Lay_R(accountant, admin)
 
-' Фронтенды рядом, каждый под своей группой персон
+
 Lay_R(web_app, backoffice)
 
-' Ряд баз данных
+
 Lay_R(db_users, db_tarifs)
 Lay_R(db_tarifs, db_audit)
 Lay_R(db_audit, db_files)
 
-' Внешние системы одним рядом внизу
+
 Lay_R(payment_sys, ais_osago)
 Lay_R(ais_osago, email_sys)
 

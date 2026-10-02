@@ -3,13 +3,10 @@
 
 title АДМИНИСТРАТОР C4 CONTAINER (Microservices DB Partitioning)
 
-' === НАСТРОЙКА ЦВЕТОВ ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddPersonTag("сотрудник", $bgColor="#438DD5", $borderColor="#316CA5", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
-
-' === ЭЛЕМЕНТЫ ===
 
 Person(admin, "Администратор", "Системный администратор ИС ОСАГО,\nимеет права всех ролей", $tags="персона_синяя")
 Person(accountant, "Бухгалтер", "Финансовый специалист страховой компании,\nпроверяет маржу, подписывает отчеты", $tags="персона_синяя")
@@ -21,7 +18,6 @@ System_Boundary(osago_service, "Информационная система оф
 
     Container(api, "API", "FASTAPI", "REST/HTTPS JSON — авторизация (RBAC),\nадминистрирование, управление тарифами")
 
-    ' === РАЗДЕЛЕННЫЕ БАЗЫ ДАННЫХ ===
     ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC)")
     ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Хранит тарифные сетки, коэффициенты и правила расчета")
     ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал событий аудита и очередь асинхронных задач")
@@ -30,49 +26,38 @@ System_Boundary(osago_service, "Информационная система оф
     Container(worker, "Worker", "Python", "Асинхронная обработка: повтор сбойных\nзадач, проверка интеграций, отчеты")
 }
 
-' Внешние системы (серые, внизу)
 System_Ext(payment_sys, "Платежная система", "Внешняя система проведения платежей", $tags="внешняя_система")
 System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
 System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
 
-' === СВЯЗИ ===
 
-' Сотрудники -> Админ-панель
 Rel_D(admin, web_app, "Управляет пользователями и ролями,\nнастраивает тарифы, смотрит аудит")
 Rel_D(accountant, web_app, "Проверяет статусы оплат,\nформирует счета и закрывающие акты")
 Rel_D(auditor, web_app, "Изучает журнал аудита\nи расследует инциденты")
 
-' Web App -> API
 Rel_D(web_app, api, "REST/HTTPS JSON — администрирование,\nуправление задачами")
 
-' API -> Разделенные базы данных
 Rel(api, db_users, "Аутентификация, управление\nпользователями и ролями (SQL)")
 Rel(api, db_tarifs, "Чтение и изменение\nтарифов и коэффициентов (SQL)")
 Rel(api, db_audit, "Запись событий безопасности\nи системных логов (SQL)")
 Rel_D(api, object_storage, "Просматривает и удаляет\nдокументы и фото (GridFS/BSON)")
 
-' API -> Worker
 Rel_R(api, worker, "Ставит задачи на повторную\nобработку и формирование отчетов")
 
-' Worker -> Базы данных
 Rel(worker, db_audit, "Забирает задачи из очереди\nв статусе pending/failed (SQL)")
 Rel(worker, object_storage, "Удаляет устаревшие файлы\nпо политике хранения")
 
-' Worker -> внешние системы
 Rel_R(worker, payment_sys, "HTTP(S), JSON — проверяет зависшие\nплатежи (по расписанию)", $tags="пунктир")
 Rel_R(worker, ais_osago, "HTTP(S), JSON — повторно регистрирует\nполис (по команде администратора)", $tags="пунктир")
 Rel_R(worker, email_sys, "Отправляет уведомления\nо сбоях и отчеты", $tags="пунктир")
 
-' E-mail система -> получатели (пунктир)
 Rel_U(email_sys, admin, "Доставка уведомлений о сбоях\nи отчетов о работе системы", $tags="пунктир")
 Rel_U(email_sys, accountant, "Доставка счетов, закрывающих актов\nи финансовых отчетов", $tags="пунктир")
 
-' === УПРАВЛЕНИЕ LAYOUT ===
-' Сотрудники сверху в ряд
+
 auditor -[hidden]right- admin
 admin -[hidden]right- accountant
 
-' Внешние системы снизу столбиком
 Lay_D(payment_sys, ais_osago)
 Lay_D(ais_osago, email_sys)
 

@@ -3,18 +3,18 @@
 
 title АВАРИЙНЫЙ ЭКСПЕРТ C4 CONTAINER
 
-' === НАСТРОЙКА ЦВЕТОВ ===
+
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
-' === ЭЛЕМЕНТЫ ===
+
 
 Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="персона_синяя")
 Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="персона_синяя")
 Person(client, "Клиент", "Участник ДТП", $tags="персона_синяя")
 
-' Центральный сервис (модуль фиксации ДТП в составе ИС ОСАГО)
+
 System_Boundary(fixation_system, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Рабочее место эксперта: загрузка фото осмотра,\nсведения о ДТП, электронная подпись клиента")
@@ -28,11 +28,11 @@ System_Boundary(fixation_system, "Информационная система о
     ContainerDb(db_files, "DB_FILES", "MongoDB", "Хранит фото ДТП, подписи\nи файлы документов")
 }
 
-' Внешние системы (серые)
+
 System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
 System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
 
-' === СВЯЗИ ===
+
 
 Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус")
 Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП")
@@ -40,23 +40,23 @@ Rel(client, web_app, "Ставит электронную подпись\nна �
 
 Rel(web_app, api, "REST/HTTPS JSON — отправка\nрезультатов осмотра")
 
-' API -> базы данных
+
 Rel(api, db_audit, "Читает и записывает акты фиксации,\nстатусы осмотра, события аудита, SQL")
 Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driver")
 
-' API -> АИС ОСАГО
+
 Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON")
 
-' Worker -> базы данных
+
 Rel(worker, db_audit, "Читает и обновляет\nстатусы задач, SQL")
 Rel(worker, db_files, "Читает фото и подписи для протокола,\nсохраняет PDF-протокол, MongoDB driver")
 
-' Worker -> внешние системы (пунктир)
+
 Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", $tags="пунктир")
 Rel(worker, email_sys, "Отправляет протокол\nосмотра", $tags="пунктир")
 Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", $tags="пунктир")
 
-' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
+
 
 dispatcher -[hidden]right- expert
 expert -[hidden]right- client

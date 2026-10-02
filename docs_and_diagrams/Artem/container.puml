@@ -3,12 +3,12 @@
 
 title Информационная система оформления ОСАГО (ИС ОСАГО). Container
 
-' === НАСТРОЙКА ЦВЕТОВ ===
+
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddPersonTag("гость_серый", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
 
-' === ЭЛЕМЕНТЫ ===
+
 
 Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="гость_серый")
 Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
@@ -31,62 +31,62 @@ System_Boundary(osago_service, "Информационная система оф
     Container(worker, "Worker", "Python", "Фоновая обработка: PDF, регистрация\nдоговора, отправка писем, сверка платежей")
 }
 
-' Внешние системы (серые, внизу)
+
 System_Ext(payment_sys, "Платежная система", "Проведение платежей", $tags="внешняя_система")
 System_Ext(email_sys, "E-mail сервис", "Почтовый сервис рассылки", $tags="внешняя_система")
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей,\nрегистрация договоров", $tags="внешняя_система")
 System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
 
-' === СВЯЗИ ===
 
-' Персоны
+
+
 Rel(guest, web_app, "Рассчитывает стоимость\nбез регистрации", "HTTPS")
 Rel(client, web_app, "Вводит данные, загружает фото,\nоплачивает, скачивает полис", "HTTPS")
 Rel(support, backoffice, "Ищет полисы, смотрит статусы,\nперезапускает задачи", "HTTPS")
 
-' Фронтенды -> API
+
 Rel(web_app, api, "Расчет, оформление, оплата,\nскачивание полиса", "REST/HTTPS, JSON")
 Rel(backoffice, api, "Поиск полисов,\nуправление задачами", "REST/HTTPS, JSON")
 
-' API -> внутренние хранилища
+
 Rel(api, db_users, "Читает и записывает данные клиентов,\nролей и полисов", "SQL")
 Rel(api, db_audit, "Записывает события аудита и транзакции,\nставит задачи в outbox (с полным payload)", "SQL")
 Rel(api, bd_files, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "MongoDB driver")
 
-' API -> внешние системы (синхронно)
+
 Rel(api, sms_sys, "Отправляет одноразовый код\nдля авторизации клиента", "HTTPS, JSON")
 Rel(api, payment_sys, "Создает платежную сессию", "HTTPS, JSON")
 Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
 Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
 
-' Worker -> внутренние хранилища
+
 Rel(worker, db_audit, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы,\nсверяет оплаты без задач", "SQL")
 Rel(worker, bd_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
 
-' Worker -> внешние системы (асинхронно, пунктир)
+
 Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")
 Rel(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
 Rel(worker, email_sys, "Отправляет клиенту письмо со ссылкой\nна полис и чек (повтор при сбое)", "SMTP / HTTPS", $tags="пунктир")
 
-' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
 
-' Персоны в один ряд
+
+
 guest -[hidden]right- client
 client -[hidden]right- support
 
-' Верхний ряд внутри boundary: фронтенды под своими персонами
+
 client -[hidden]down- web_app
 support -[hidden]down- backoffice
 web_app -[hidden]right- backoffice
 
-' Нижний ряд внутри boundary: ядро в одну строку
+
 web_app -[hidden]down- api
 api -[hidden]right- db_users
 db_users -[hidden]right- db_audit
 db_audit -[hidden]right- bd_files
 bd_files -[hidden]right- worker
 
-' Внешние системы внизу
+
 osago_service -[hidden]down- payment_sys
 payment_sys -[hidden]right- email_sys
 email_sys -[hidden]right- ais_osago

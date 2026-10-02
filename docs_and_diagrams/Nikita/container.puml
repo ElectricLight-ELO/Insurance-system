@@ -3,17 +3,17 @@
 
 title СЕРВИС ОФОРМЛЕНИЯ ПОЛИСОВ ОСАГО C4 CONTAINER
 
-' === НАСТРОЙКА ЦВЕТОВ ===
+
 AddPersonTag("пользователь", $bgColor="#00008B", $borderColor="#000050", $fontColor="#FFFFFF")
 AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
 
-' === ЭЛЕМЕНТЫ ===
+
 
 Person(agent, "Страховой агент", "Специалист страховой компании,\nработающий с клиентами", $tags="user")
 Person(client, "Клиент", "Участник ДТП (застрахованное лицо\nили потерпевшее третье лицо)", $tags="user")
 Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nутверждение сложных случаев", $tags="user")
 
-' Центральный сервис
+
 System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Клиентское веб-приложение. Предоставляет интерфейс для агента,\nотправляет REST/HTTPS+JSON запросы к API")
@@ -26,64 +26,64 @@ System_Boundary(osago_service, "Информационная система оф
     ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL / Redis", "Журнал событий аудита и очередь асинхронных задач")
 }
 
-' Внешние системы (серые)
+
 System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная\nсистема страхования", $tags="внешняя_система")
 System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
 
-' === СВЯЗИ ===
 
-' Страховой агент -> Web App
+
+
 Rel(agent, web_app, "Составляет и заполняет договора,\nоформляет полис ОСАГО")
 
-' Клиент -> Web App
+
 Rel(client, web_app, "Подаёт заявку на оформление полиса,\nполучает готовый полис")
 
-' Менеджер -> Web App (аналитика и управление)
+
 Rel(manager, web_app, "Просматривает отчёты по продажам,\nуправляет списком агентов,\nутверждает сложные случаи")
 
-' Web App -> API
+
 Rel(web_app, api, "REST/HTTPS+JSON — проверка корректности\nи актуальности данных")
 
-' API -> DB_USERS
+
 Rel(api, db_users, "Аутентификация, проверка прав доступа (RBAC),\nчтение/запись пользователей, SQL")
 
-' API -> DB_AUDIT
+
 Rel(api, db_audit, "Запись событий аудита, SQL")
 
-' API -> Worker
+
 Rel(api, worker, "Создание задач на асинхронную обработку")
 
-' Worker -> DB_AUDIT (поллинг очереди задач)
+
 Rel(worker, db_audit, "Читает и обновляет очередь задач\nи статусы, SQL/Redis")
 
-' Worker -> АИС ОСАГО (пунктир — повтор при сбое)
+
 Rel(worker, ais_osago, "Повторная регистрация полиса\nпри ошибке/таймауте", $tags="пунктир")
 
-' Worker -> E-mail система (пунктир)
+
 Rel(worker, email_sys, "Отправка электронного полиса\nи уведомлений", $tags="пунктир")
 
-' API -> E-mail система (для оперативных вопросов)
+
 Rel(api, email_sys, "Отправка вопросов и корректировок,\nSMTP/HTTP")
 
-' E-mail система -> Клиент (пунктир)
+
 Rel(email_sys, client, "Доставка информации и договоров\nКлиенту", $tags="пунктир")
 
-' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
 
-' Акторы сверху в ряд
+
+
 agent -[hidden]right- client
 client -[hidden]right- manager
 
-' Спуск к приложению
+
 agent -[hidden]down- web_app
 
-' Контейнеры внутри boundary
+
 web_app -[hidden]right- api
 api -[hidden]down- db_users
 db_users -[hidden]right- db_audit
 db_audit -[hidden]right- worker
 
-' Внешние системы внизу
+
 osago_service -[hidden]down- ais_osago
 ais_osago -[hidden]right- email_sys
 
