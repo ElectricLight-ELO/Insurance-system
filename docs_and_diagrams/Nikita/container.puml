@@ -20,10 +20,10 @@ System_Boundary(osago_service, "Информационная система оф
 
     Container(api, "API", "FASTAPI", "Backend сервис. Принимает запросы от Web App,\nвзаимодействует с БД, создаёт задачи для Worker")
 
-    Container(worker, "Worker", "Celery / Python / Redis", "Асинхронная обработка:\nгенерация PDF-протокола, отправка email,\nповторная регистрация полиса при сбое")
+    Container(worker, "Worker", "Celery / Python", "Асинхронная обработка:\nгенерация PDF-протокола, отправка email,\nповторная регистрация полиса при сбое")
 
     ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC)")
-    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL / Redis", "Журнал событий аудита и очередь асинхронных задач")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Журнал событий аудита и очередь асинхронных задач")
 }
 
 
@@ -54,7 +54,7 @@ Rel(api, db_audit, "Запись событий аудита, SQL")
 Rel(api, worker, "Создание задач на асинхронную обработку")
 
 
-Rel(worker, db_audit, "Читает и обновляет очередь задач\nи статусы, SQL/Redis")
+Rel(worker, db_audit, "Читает и обновляет очередь задач\nи статусы, SQL")
 
 
 Rel(worker, ais_osago, "Повторная регистрация полиса\nпри ошибке/таймауте", $tags="пунктир")
