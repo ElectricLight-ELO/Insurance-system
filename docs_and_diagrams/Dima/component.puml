@@ -3,118 +3,135 @@
 
 title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, фиксация ДТП
 
-' === НАСТРОЙКА ЦВЕТОВ ===
-' Серые внешние системы (как в container-диаграмме)
+' === НАСТРОЙКА ЦВЕТОВ (БЕЗ ИЗМЕНЕНИЙ) ===
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 
-' Цвета слоев многослойной архитектуры
-' (все компоненты окрашены в #6cc2f5, слои различаются цветом рамки)
 AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
 AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
 AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
 AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
 
 ' === ВЫЗЫВАЮЩИЙ КОНТЕЙНЕР (СВЕРХУ) ===
-
 Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера и эксперта,\nэлектронная подпись клиента")
 
 ' === РАЗБИРАЕМЫЙ КОНТЕЙНЕР: API (FASTAPI) ===
-
 Container_Boundary(api, "API — FASTAPI") {
 
     ' --- Слой API / представления ---
-    Component(c_acc, "AccidentController", "FastAPI Router", "Принимает REST-запросы:\nрегистрация заявления о ДТП,\nназначение эксперта, статусы", $tags="api")
-
-    Component(c_insp, "InspectionController", "FastAPI Router", "Принимает REST-запросы:\nрезультаты осмотра, фото,\nэлектронная подпись клиента", $tags="api")
+    together {
+        Component(c_insp, "InspectionController", "FastAPI Router", "Принимает REST-запросы:\nрезультаты осмотра, фото,\nэлектронная подпись клиента", $tags="api")
+        Component(c_acc, "AccidentController", "FastAPI Router", "Принимает REST-запросы:\nрегистрация заявления о ДТП,\nназначение эксперта, статусы", $tags="api")
+    }
 
     ' --- Слой бизнес-логики ---
-    Component(s_acc, "AccidentService", "Python Service", "Бизнес-правила заявления:\nсоздание, назначение эксперта,\nсмена статусов", $tags="service")
-
-    Component(s_insp, "InspectionService", "Python Service", "Формирование акта фиксации ДТП,\nпроверка подписи, постановка\nзадачи на генерацию PDF", $tags="service")
-
-    Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nпо каждому действию\nс системой", $tags="service")
+    ' ВАЖНО: Ставим AuditService ПЕРВЫМ, чтобы он был слева, и связываем его right-связью
+    together {
+        Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nпо каждому действию\nс системой", $tags="service")
+        Component(s_insp, "InspectionService", "Python Service", "Формирование акта фиксации ДТП,\nпроверка подписи, постановка\nзадачи на генерацию PDF", $tags="service")
+        Component(s_acc, "AccidentService", "Python Service", "Бизнес-правила заявления:\nсоздание, назначение эксперта,\nсмена статусов", $tags="service")
+    }
 
     ' --- Слой интеграции ---
-    Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nпроверка наличия полиса ОСАГО\nчерез АИС ОСАГО", $tags="integration")
-
-    Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(генерация PDF-протокола)", $tags="integration")
-
-    Component(f_email, "EmailFacade", "SMTP Client", "Отправка уведомлений клиенту\nи диспетчеру о статусе заявления\nи готовности протокола", $tags="integration")
+    together {
+        Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(генерация PDF-протокола)", $tags="integration")
+        Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nпроверка наличия полиса ОСАГО\nчерез АИС ОСАГО", $tags="integration")
+        Component(f_email, "EmailFacade", "SMTP Client", "Отправка уведомлений клиенту\nи диспетчеру о статусе заявления\nи готовности протокола", $tags="integration")
+    }
 
     ' --- Слой доступа к данным ---
-    Component(r_acc, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям, актам,\nсобытиям аудита и очереди\nв PostgreSQL", $tags="data")
-
-    Component(r_file, "FileRepository", "PyMongo", "Доступ к фото ДТП, подписям\nи PDF-документам\nв MongoDB", $tags="data")
+    together {
+        Component(r_acc, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям, актам,\nсобытиям аудита и очереди\nв PostgreSQL", $tags="data")
+        Component(r_file, "FileRepository", "PyMongo", "Доступ к фото ДТП, подписям\nи PDF-документам\nв MongoDB", $tags="data")
+    }
 }
 
 ' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, акты фиксации,\nаудит, очередь задач")
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи,\nPDF-документы")
+}
+together {
+    System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+    System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+}
 
-ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, акты фиксации,\nаудит, очередь задач")
-ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи,\nPDF-документы")
-System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
-System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
-
-' === СВЯЗИ ===
+' === СВЯЗИ (RELATIONSHIPS) ===
 
 ' Web App -> Контроллеры
-Rel(web_app, c_acc, "Регистрация заявления о ДТП,\nназначение эксперта [REST/HTTPS/JSON]")
-Rel(web_app, c_insp, "Отправка результатов осмотра,\nфото и подписи [REST/HTTPS/JSON]")
+Rel(web_app, c_insp, "Результаты осмотра [REST/JSON]")
+Rel(web_app, c_acc, "Регистрация заявления [REST/JSON]")
 
 ' Контроллеры -> Сервисы
-Rel(c_acc, s_acc, "Вызывает бизнес-логику\nзаявлений [Python]")
-Rel(c_insp, s_insp, "Вызывает бизнес-логику\nосмотра [Python]")
+Rel(c_insp, s_insp, "Вызов логики [Python]")
+Rel(c_acc, s_acc, "Вызов логики [Python]")
 
-' Сервисы -> Аудит
-Rel(s_acc, s_audit, "Передает события аудита [Python]")
-Rel(s_insp, s_audit, "Передает события аудита [Python]")
+' Сервисы -> Аудит (теперь AuditService слева, стрелки будут короткими)
+Rel(s_insp, s_audit, "События аудита [Python]")
+Rel(s_acc, s_audit, "События аудита [Python]")
 
 ' Сервисы -> Фасады
-Rel(s_insp, f_ais, "Запрашивает проверку\nполиса ОСАГО [Python]")
-Rel(s_insp, f_task, "Ставит задачу на\nгенерацию PDF [Python]")
-Rel(s_acc, f_email, "Запрашивает отправку\nуведомления [Python]")
+Rel(s_insp, f_task, "Задача на PDF [Python]")
+Rel(s_insp, f_ais, "Проверка полиса [Python]")
+Rel(s_acc, f_email, "Отправка уведомления [Python]")
 
 ' Сервисы -> Репозитории
-Rel(s_acc, r_acc, "Читает и пишет заявления\nи статусы [SQLAlchemy]")
-Rel(s_insp, r_acc, "Читает и пишет акты\nфиксации [SQLAlchemy]")
-Rel(s_insp, r_file, "Сохраняет фото\nи подписи [PyMongo]")
-Rel(s_audit, r_acc, "Пишет события аудита [SQLAlchemy]")
+Rel(s_acc, r_acc, "Чтение/запись [SQLAlchemy]")
+Rel(s_insp, r_file, "Сохранение фото [PyMongo]")
+Rel(s_audit, r_acc, "Запись аудита [SQLAlchemy]")
 
 ' Фасад -> Репозиторий
-Rel(f_task, r_acc, "Помещает задачу\nв очередь [SQL]")
+Rel(f_task, r_acc, "Очередь задач [SQL]")
 
 ' Репозитории -> БД
-Rel(r_acc, db_audit, "Читает и пишет данные [SQL/TCP]")
-Rel(r_file, db_files, "Читает и пишет файлы [MongoDB Wire]")
+Rel(r_acc, db_audit, "Данные [SQL/TCP]")
+Rel(r_file, db_files, "Файлы [MongoDB Wire]")
 
 ' Фасад -> Внешняя система
-Rel(f_ais, ais_osago, "Проверяет наличие полиса\nОСАГО [HTTP(S)/JSON]")
-Rel(f_email, email_sys, "Отправляет письма клиенту\nи диспетчеру [SMTP/HTTPS]")
+Rel(f_ais, ais_osago, "Проверка ОСАГО [HTTP(S)/JSON]")
+Rel(f_email, email_sys, "Письма [SMTP/HTTPS]")
 
-' === УПРАВЛЕНИЕ LAYOUT (скрытые связи) ===
-' Слой контроллеров
-c_acc -[hidden]right- c_insp
-' Слой сервисов
-s_acc -[hidden]right- s_insp
-s_insp -[hidden]right- s_audit
-' Переход между слоями
-c_acc -[hidden]down- s_acc
-c_insp -[hidden]down- s_insp
-' Слой фасадов
-f_ais -[hidden]right- f_task
-f_task -[hidden]right- f_email
-s_acc -[hidden]down- f_email
-s_insp -[hidden]down- f_task
-' Слой репозиториев
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+' ЖЕСТКАЯ СЕТКА: ЭТО ГЛАВНОЕ ИСПРАВЛЕНИЕ
+
+' 1. Выстраиваем контроллеры в ряд (Inspection слева, Accident справа)
+c_insp -[hidden]right- c_acc
+
+' 2. Выстраиваем сервисы в ряд (Audit слева, Inspection в центре, Accident справа)
+s_audit -[hidden]right- s_insp
+s_insp -[hidden]right- s_acc
+
+' 3. Выстраиваем фасады в ряд (Task в центре, Ais справа, Email под Accident)
+f_task -[hidden]right- f_ais
+f_ais -[hidden]right- f_email
+
+' 4. Выстраиваем репозитории в ряд
 r_acc -[hidden]right- r_file
-f_ais -[hidden]down- r_acc
-f_task -[hidden]down- r_file
-' Внешнее окружение
-web_app -[hidden]down- c_acc
-r_acc -[hidden]down- db_audit
-r_file -[hidden]down- db_files
+
+' 5. Выстраиваем БД и внешние системы в ряд
 db_audit -[hidden]right- db_files
 db_files -[hidden]right- ais_osago
 ais_osago -[hidden]right- email_sys
+
+' 6. Вертикальные связи для жесткой иерархии слоев
+' Контроллеры строго над сервисами
+c_insp -[hidden]down- s_insp
+c_acc -[hidden]down- s_acc
+
+' Сервисы строго над фасадами
+s_insp -[hidden]down- f_task
+s_acc -[hidden]down- f_ais
+
+' Фасады строго над репозиториями
+f_task -[hidden]down- r_acc
+f_ais -[hidden]down- r_file
+
+' Репозитории строго над БД
+r_acc -[hidden]down- db_audit
+r_file -[hidden]down- db_files
+
+' Web App строго над контроллерами
+web_app -[hidden]down- c_insp
+web_app -[hidden]down- c_acc
 
 ' === ЛЕГЕНДА ===
 SHOW_LEGEND()
