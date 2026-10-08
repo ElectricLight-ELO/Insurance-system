@@ -47,6 +47,8 @@ Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driv
 
 Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON")
 
+' Rel(api, email_sys, "Отправляет уведомления о статусе\nзаявления, SMTP", $tags="пунктир")
+
 
 Rel(worker, db_audit, "Читает и обновляет\nстатусы задач, SQL")
 Rel(worker, db_files, "Читает фото и подписи для протокола,\nсохраняет PDF-протокол, MongoDB driver")
