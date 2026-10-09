@@ -45,7 +45,7 @@ Rel(api, db_audit, "Читает и записывает акты фиксаци
 Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driver")
 
 
-Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON")
+Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON", $tags="пунктир")
 
 ' Rel(api, email_sys, "Отправляет уведомления о статусе\nзаявления, SMTP", $tags="пунктир")
 
