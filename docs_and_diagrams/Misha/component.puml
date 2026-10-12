@@ -1,0 +1,124 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, фин. контроль и маржа
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+
+AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
+
+Container(web_app, "Web App(React SPA)", "React, TypeScript", "Интерфейс панели аналитики для отображения графиков прибыльности, маржинальности, тарифов и статусов транзакций шлюзов")
+
+Container_Boundary(api, "API — FASTAPI") {
+
+    ' --- Слой API / представления ---
+    together {
+        Component(c_fin, "FinanceController", "FastAPI Router", "Принимает REST-запросы:\nстатистика прибыльности, маржа,\nзапросы сверки от бухгалтера", $tags="api")
+        Component(c_agent, "AgentController", "FastAPI Router", "Принимает REST-запросы:\nданные по полисам и агентской\nкомиссии (КВ) от агентов", $tags="api")
+    }
+
+    ' --- Слой бизнес-логики ---
+    together {
+        Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nи логов финансовых операций", $tags="service")
+        Component(s_fin, "FinanceService", "Python Service", "Расчет маржинальности периода,\nвалидация актов сверки,\nпроверка комиссий", $tags="service")
+        Component(s_agent, "AgentService", "Python Service", "Бизнес-правила обработки\nданных агентов и комиссий", $tags="service")
+    }
+
+    ' --- Слой интеграции ---
+    together {
+        Component(f_task, "TaskQueueFacade", "Redis Client", "Постановка асинхронных задач\nв очередь для Worker\n(тяжелый расчет маржи)", $tags="integration")
+        Component(f_pay, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nполучение отчетов о поступлениях\nот Платежной системы", $tags="integration")
+    }
+
+    ' --- Слой доступа к данным ---
+    together {
+        Component(r_tarifs, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам,\nкоэффициентам и правилам\nв БД тарифов", $tags="data")
+        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к журналу аудита,\nтранзакциям и очереди задач\nв PostgreSQL", $tags="data")
+    }
+}
+
+' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Хранит тарифы сетки, коэффициенты и правила рассчета")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "журнал событий аудита и очередь асинхронных задач")
+}
+together {
+    System_Ext(payment_sys, "Платежная система", "Проведение платежей, комиссии", $tags="внешняя_система")
+}
+
+' === СВЯЗИ (RELATIONSHIPS) ===
+
+' Web App -> Контроллеры
+Rel(web_app, c_fin, "Запрос фин. статистики [REST/JSON]")
+Rel(web_app, c_agent, "Передача данных полисов [REST/JSON]")
+
+' Контроллеры -> Сервисы
+Rel(c_fin, s_fin, "Вызов логики [Python]")
+Rel(c_agent, s_agent, "Вызов логики [Python]")
+
+' Сервисы -> Аудит
+Rel(s_fin, s_audit, "События аудита [Python]")
+Rel(s_agent, s_audit, "События аудита [Python]")
+
+' Сервисы -> Фасады
+Rel(s_fin, f_task, "Задача на просчет маржи [Python]")
+Rel(s_fin, f_pay, "Запрос сверки шлюза [Python]")
+
+' Сервисы -> Репозитории
+Rel(s_fin, r_tarifs, "Чтение тарифов [SQLAlchemy]")
+Rel(s_fin, r_audit, "Запись транзакций [SQLAlchemy]")
+Rel(s_agent, r_audit, "Сохранение комиссий [SQLAlchemy]")
+Rel(s_audit, r_audit, "Запись логов [SQLAlchemy]")
+
+' Фасад -> Репозиторий
+Rel(f_task, r_audit, "Постановка в очередь [SQL]")
+
+' Репозитории -> БД
+Rel(r_tarifs, db_tarifs, "Данные [SQL/TCP]")
+Rel(r_audit, db_audit, "Данные [SQL/TCP]")
+
+' Фасад -> Внешняя система
+Rel(f_pay, payment_sys, "Проверка платежей [HTTP(S)/JSON]")
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+
+' 1. Выстраиваем контроллеры в ряд
+c_fin -[hidden]right- c_agent
+
+' 2. Выстраиваем сервисы в ряд
+s_audit -[hidden]right- s_fin
+s_fin -[hidden]right- s_agent
+
+' 3. Выстраиваем фасады в ряд
+f_task -[hidden]right- f_pay
+
+' 4. Выстраиваем репозитории в ряд
+r_tarifs -[hidden]right- r_audit
+
+' 5. Выстраиваем БД и внешние системы в ряд
+db_tarifs -[hidden]right- db_audit
+db_audit -[hidden]right- payment_sys
+
+' 6. Вертикальные связи слоев
+c_fin -[hidden]down- s_fin
+c_agent -[hidden]down- s_agent
+
+s_fin -[hidden]down- f_task
+s_agent -[hidden]down- f_pay
+
+f_task -[hidden]down- r_tarifs
+f_pay -[hidden]down- r_audit
+
+r_tarifs -[hidden]down- db_tarifs
+r_audit -[hidden]down- db_audit
+
+web_app -[hidden]down- c_fin
+web_app -[hidden]down- c_agent
+
+' === ЛЕГЕНДА ===
+SHOW_LEGEND()
+
+@enduml
