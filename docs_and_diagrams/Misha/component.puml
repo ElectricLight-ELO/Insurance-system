@@ -1,0 +1,111 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 COMPONENT — WORKER (CELERY): ИС ОСАГО, фин. контроль и маржа
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+
+AddComponentTag("consumer", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой приема задач: брокер и воркеры (Celery)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: фоновые задачи")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: внешние шлюзы")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозиторий аудита")
+
+Container(queue_db, "BD_AUDIT (Queue)", "PostgreSQL / Redis", "Очередь задач Celery и журнал событий аудита")
+
+Container_Boundary(worker, "Worker [Python / Celery]") {
+
+    ' --- Слой приема задач / consumers ---
+    together {
+        Component(c_margin, "MarginCalculationTask", "Celery Task", "Асинхронная задача:\nфоновый просчет маржи\nпериода и прибыльности", $tags="consumer")
+        Component(c_reconcile, "GatewayReconciliationTask", "Celery Task", "Периодическая задача (Cron):\nсверка зависших транзакций\nс платежной системой", $tags="consumer")
+    }
+
+    ' --- Слой бизнес-логики ---
+    together {
+        Component(s_audit, "AuditService", "Python Service", "Запись системных логов\nи статусов выполнения задач", $tags="service")
+        Component(s_margin, "MarginService", "Python Service", "Логика агрегации данных,\nрасчета маржи и комиссий (КВ)", $tags="service")
+        Component(s_reconcile, "ReconciliationService", "Python Service", "Бизнес-правила сопоставления\nпоступлений и списанных комиссий", $tags="service")
+    }
+
+    ' --- Слой интеграции ---
+    together {
+        Component(f_pay, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nзапрос статусов и отчетов\nу Платежной системы", $tags="integration")
+    }
+
+    ' --- Слой доступа к данным ---
+    together {
+        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к таблицам аудита,\nочереди задач и финансовым\nлогам в PostgreSQL", $tags="data")
+    }
+}
+
+' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Очередь задач, журнал аудита\nи результаты расчетов")
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и коэффициенты\nдля расчетов маржи")
+}
+together {
+    System_Ext(payment_sys, "Платежная система", "Проведение платежей, чистые поступления, комиссии", $tags="внешняя_система")
+}
+
+' === СВЯЗИ (RELATIONSHIPS) ===
+
+' Очередь -> Задачи воркера
+Rel(queue_db, c_margin, "Вызов задачи [Redis Broker]")
+Rel(queue_db, c_reconcile, "Запуск по расписанию [Celery Beat]")
+
+' Задачи -> Сервисы
+Rel(c_margin, s_margin, "Исполнение логики [Python]")
+Rel(c_reconcile, s_reconcile, "Исполнение логики [Python]")
+
+' Сервисы -> Аудит
+Rel(s_margin, s_audit, "Логирование статуса [Python]")
+Rel(s_reconcile, s_audit, "Логирование статуса [Python]")
+
+' Сервисы -> Фасады
+Rel(s_reconcile, f_pay, "Запрос сверки транзакций [Python]")
+
+' Сервисы -> Репозитории
+Rel(s_margin, r_audit, "Чтение/запись результатов [SQLAlchemy]")
+Rel(s_reconcile, r_audit, "Обновление статусов [SQLAlchemy]")
+Rel(s_audit, r_audit, "Запись логов аудита [SQLAlchemy]")
+
+' Репозитории -> БД
+Rel(r_audit, db_audit, "Данные и очередь [SQL/TCP]")
+Rel(s_margin, db_tarifs, "Чтение тарифов для расчета [SQL]")
+
+' Фасад -> Внешняя система
+Rel(f_pay, payment_sys, "Сверка зависших транзакций [HTTP(S)/JSON]", $tags="пунктир")
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+
+' 1. Выстраиваем задачи в ряд
+c_margin -[hidden]right- c_reconcile
+
+' 2. Выстраиваем сервисы в ряд
+s_audit -[hidden]right- s_margin
+s_margin -[hidden]right- s_reconcile
+
+' 3. Выстраиваем фасады в ряд
+f_pay -[hidden]right- r_audit
+
+' 4. Выстраиваем БД и внешние системы в ряд
+db_audit -[hidden]right- db_tarifs
+db_tarifs -[hidden]right- payment_sys
+
+' 5. Вертикальные связи слоев
+c_margin -[hidden]down- s_margin
+c_reconcile -[hidden]down- s_reconcile
+
+s_margin -[hidden]down- f_pay
+s_reconcile -[hidden]down- r_audit
+
+f_pay -[hidden]down- db_audit
+r_audit -[hidden]down- db_tarifs
+
+queue_db -[hidden]down- c_margin
+queue_db -[hidden]down- c_reconcile
+
+' === ЛЕГЕНДА ===
+SHOW_LEGEND()
+
+@enduml
