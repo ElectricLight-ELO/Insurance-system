@@ -1,122 +1,109 @@
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
-title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, фин. контроль и маржа
+title C4 COMPONENT — WORKER (CELERY): ИС ОСАГО, фин. контроль и маржа
 
 AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 
-AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
-AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
-AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
-AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
+AddComponentTag("consumer", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой приема задач: брокер и воркеры (Celery)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: фоновые задачи")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: внешние шлюзы")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозиторий аудита")
 
-Container(web_app, "Web App(React SPA)", "React, TypeScript", "Интерфейс панели аналитики для отображения графиков прибыльности, маржинальности, тарифов и статусов транзакций шлюзов")
+Container(queue_db, "BD_AUDIT (Queue)", "PostgreSQL / Redis", "Очередь задач Celery и журнал событий аудита")
 
-Container_Boundary(api, "API — FASTAPI") {
+Container_Boundary(worker, "Worker [Python / Celery]") {
 
-    ' --- Слой API / представления ---
+    ' --- Слой приема задач / consumers ---
     together {
-        Component(c_fin, "FinanceController", "FastAPI Router", "Принимает REST-запросы:\nстатистика прибыльности, маржа,\nзапросы сверки от бухгалтера", $tags="api")
-        Component(c_agent, "AgentController", "FastAPI Router", "Принимает REST-запросы:\nданные по полисам и агентской\nкомиссии (КВ) от агентов", $tags="api")
+        Component(c_margin, "MarginCalculationTask", "Celery Task", "Асинхронная задача:\nфоновый просчет маржи\nпериода и прибыльности", $tags="consumer")
+        Component(c_reconcile, "GatewayReconciliationTask", "Celery Task", "Периодическая задача (Cron):\nсверка зависших транзакций\nс платежной системой", $tags="consumer")
     }
 
     ' --- Слой бизнес-логики ---
     together {
-        Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nи логов финансовых операций", $tags="service")
-        Component(s_fin, "FinanceService", "Python Service", "Расчет маржинальности периода,\nвалидация актов сверки,\nпроверка комиссий", $tags="service")
-        Component(s_agent, "AgentService", "Python Service", "Бизнес-правила обработки\nданных агентов и комиссий", $tags="service")
+        Component(s_audit, "AuditService", "Python Service", "Запись системных логов\nи статусов выполнения задач", $tags="service")
+        Component(s_margin, "MarginService", "Python Service", "Логика агрегации данных,\nрасчета маржи и комиссий (КВ)", $tags="service")
+        Component(s_reconcile, "ReconciliationService", "Python Service", "Бизнес-правила сопоставления\nпоступлений и списанных комиссий", $tags="service")
     }
 
     ' --- Слой интеграции ---
     together {
-        Component(f_task, "TaskQueueFacade", "Redis Client", "Постановка асинхронных задач\nв очередь для Worker\n(тяжелый расчет маржи)", $tags="integration")
-        Component(f_pay, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nполучение отчетов о поступлениях\nот Платежной системы", $tags="integration")
+        Component(f_pay, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nзапрос статусов и отчетов\nу Платежной системы", $tags="integration")
     }
 
     ' --- Слой доступа к данным ---
     together {
-        Component(r_tarifs, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам,\nкоэффициентам и правилам\nв БД тарифов", $tags="data")
-        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к журналу аудита,\nтранзакциям и очереди задач\nв PostgreSQL", $tags="data")
+        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к таблицам аудита,\nочереди задач и финансовым\nлогам в PostgreSQL", $tags="data")
     }
 }
 
 ' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
 together {
-    ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Хранит тарифы сетки, коэффициенты и правила рассчета")
-    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "журнал событий аудита и очередь асинхронных задач")
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Очередь задач, журнал аудита\nи результаты расчетов")
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и коэффициенты\nдля расчетов маржи")
 }
 together {
-    System_Ext(payment_sys, "Платежная система", "Проведение платежей, комиссии", $tags="внешняя_система")
+    System_Ext(payment_sys, "Платежная система", "Проведение платежей, чистые поступления, комиссии", $tags="внешняя_система")
 }
 
 ' === СВЯЗИ (RELATIONSHIPS) ===
 
-' Web App -> Контроллеры
-Rel(web_app, c_fin, "Запрос фин. статистики [REST/JSON]")
-Rel(web_app, c_agent, "Передача данных полисов [REST/JSON]")
+' Очередь -> Задачи воркера
+Rel(queue_db, c_margin, "Вызов задачи [Redis Broker]")
+Rel(queue_db, c_reconcile, "Запуск по расписанию [Celery Beat]")
 
-' Контроллеры -> Сервисы
-Rel(c_fin, s_fin, "Вызов логики [Python]")
-Rel(c_agent, s_agent, "Вызов логики [Python]")
+' Задачи -> Сервисы
+Rel(c_margin, s_margin, "Исполнение логики [Python]")
+Rel(c_reconcile, s_reconcile, "Исполнение логики [Python]")
 
 ' Сервисы -> Аудит
-Rel(s_fin, s_audit, "События аудита [Python]")
-Rel(s_agent, s_audit, "События аудита [Python]")
+Rel(s_margin, s_audit, "Логирование статуса [Python]")
+Rel(s_reconcile, s_audit, "Логирование статуса [Python]")
 
 ' Сервисы -> Фасады
-Rel(s_fin, f_task, "Задача на просчет маржи [Python]")
-Rel(s_fin, f_pay, "Запрос сверки шлюза [Python]")
+Rel(s_reconcile, f_pay, "Запрос сверки транзакций [Python]")
 
 ' Сервисы -> Репозитории
-Rel(s_fin, r_tarifs, "Чтение тарифов [SQLAlchemy]")
-Rel(s_fin, r_audit, "Запись транзакций [SQLAlchemy]")
-Rel(s_agent, r_audit, "Сохранение комиссий [SQLAlchemy]")
-Rel(s_audit, r_audit, "Запись логов [SQLAlchemy]")
-
-' Фасад -> Репозиторий
-Rel(f_task, r_audit, "Постановка в очередь [SQL]")
+Rel(s_margin, r_audit, "Чтение/запись результатов [SQLAlchemy]")
+Rel(s_reconcile, r_audit, "Обновление статусов [SQLAlchemy]")
+Rel(s_audit, r_audit, "Запись логов аудита [SQLAlchemy]")
 
 ' Репозитории -> БД
-Rel(r_tarifs, db_tarifs, "Данные [SQL/TCP]")
-Rel(r_audit, db_audit, "Данные [SQL/TCP]")
+Rel(r_audit, db_audit, "Данные и очередь [SQL/TCP]")
+Rel(s_margin, db_tarifs, "Чтение тарифов для расчета [SQL]")
 
 ' Фасад -> Внешняя система
-Rel(f_pay, payment_sys, "Проверка платежей [HTTP(S)/JSON]")
+Rel(f_pay, payment_sys, "Сверка зависших транзакций [HTTP(S)/JSON]", $tags="пунктир")
 
 ' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
 
-' 1. Выстраиваем контроллеры в ряд
-c_fin -[hidden]right- c_agent
+' 1. Выстраиваем задачи в ряд
+c_margin -[hidden]right- c_reconcile
 
 ' 2. Выстраиваем сервисы в ряд
-s_audit -[hidden]right- s_fin
-s_fin -[hidden]right- s_agent
+s_audit -[hidden]right- s_margin
+s_margin -[hidden]right- s_reconcile
 
 ' 3. Выстраиваем фасады в ряд
-f_task -[hidden]right- f_pay
+f_pay -[hidden]right- r_audit
 
-' 4. Выстраиваем репозитории в ряд
-r_tarifs -[hidden]right- r_audit
+' 4. Выстраиваем БД и внешние системы в ряд
+db_audit -[hidden]right- db_tarifs
+db_tarifs -[hidden]right- payment_sys
 
-' 5. Выстраиваем БД и внешние системы в ряд
-db_tarifs -[hidden]right- db_audit
-db_audit -[hidden]right- payment_sys
+' 5. Вертикальные связи слоев
+c_margin -[hidden]down- s_margin
+c_reconcile -[hidden]down- s_reconcile
 
-' 6. Вертикальные связи слоев
-c_fin -[hidden]down- s_fin
-c_agent -[hidden]down- s_agent
+s_margin -[hidden]down- f_pay
+s_reconcile -[hidden]down- r_audit
 
-s_fin -[hidden]down- f_task
-s_agent -[hidden]down- f_pay
+f_pay -[hidden]down- db_audit
+r_audit -[hidden]down- db_tarifs
 
-f_task -[hidden]down- r_tarifs
-f_pay -[hidden]down- r_audit
-
-r_tarifs -[hidden]down- db_tarifs
-r_audit -[hidden]down- db_audit
-
-web_app -[hidden]down- c_fin
-web_app -[hidden]down- c_agent
+queue_db -[hidden]down- c_margin
+queue_db -[hidden]down- c_reconcile
 
 ' === ЛЕГЕНДА ===
 SHOW_LEGEND()
