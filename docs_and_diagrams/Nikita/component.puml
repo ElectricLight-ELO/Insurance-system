@@ -1,0 +1,90 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 COMPONENT — Web App (React SPA): ИС ОСАГО, фиксация ДТП
+
+AddComponentTag("view", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000")
+AddComponentTag("logic", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000")
+AddComponentTag("ui", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000")
+
+Container(web_app_ext, "Web App", "React SPA", "Клиентское веб-приложение.\nПредоставляет интерфейс для агента,\nотправляет REST/HTTPS+JSON запросы к API")
+
+Container_Boundary(web_app, "Web App — React SPA (Компоненты)") {
+
+    together {
+        Component(p_dtp, "AccidentPage", "React Page", "Экран регистрации\nзаявления о ДТП,\nввод данных", $tags="view")
+        Component(p_insp, "InspectionPage", "React Page", "Экран осмотра,\nзагрузка фото,\nподписание акта", $tags="view")
+        Component(p_exp, "ExpertDashboard", "React Page", "Рабочее место\nэксперта, список\nназначенных дел", $tags="view")
+    }
+
+    together {
+        Component(l_acc, "AccidentLogic", "React Hooks", "Логика черновика\nзаявления, валидация\nполей", $tags="logic")
+        Component(l_insp, "InspectionLogic", "React Hooks", "Логика результатов\nосмотра, статус\nзагрузки фото", $tags="logic")
+        Component(l_auth, "AuthLogic", "React Context", "Токены, роль\nпользователя\n(клиент/эксперт)", $tags="logic")
+    }
+
+    together {
+        Component(api_acc, "AccidentApiClient", "HTTP Client", "REST-вызовы к\nAccidentController\n(создание, статусы)", $tags="integration")
+        Component(api_insp, "InspectionApiClient", "HTTP Client", "REST-вызовы к\nInspectionController\n(фото, подпись)", $tags="integration")
+    }
+
+    together {
+        Component(ui_form, "FormWizard", "React Component", "Пошаговая форма\nввода данных ДТП", $tags="ui")
+        Component(ui_upload, "PhotoUploader", "React Component", "Компонент загрузки\nи превью фото", $tags="ui")
+        Component(ui_sig, "SignaturePad", "React Component", "Канвас для\nэлектронной подписи", $tags="ui")
+    }
+}
+
+together {
+    Container(api, "API", "FASTAPI", "Backend сервис.\nПринимает запросы от Web App")
+}
+
+Rel_D(web_app_ext, p_dtp, " ")
+Rel_D(web_app_ext, p_insp, " ")
+Rel_D(web_app_ext, p_exp, " ")
+
+Rel(p_dtp, l_acc, "Использование [React]")
+Rel(p_insp, l_insp, "Использование [React]")
+Rel(p_exp, l_acc, "Чтение списка [React]")
+
+Rel(l_acc, api_acc, "Отправка данных [HTTP/JSON]")
+Rel(l_insp, api_insp, "Отправка данных [HTTP/JSON]")
+
+Rel(p_dtp, ui_form, "Использование")
+Rel(p_insp, ui_upload, "Использование")
+Rel(p_insp, ui_sig, "Использование")
+
+Rel(api_acc, api, "REST/HTTPS+JSON")
+Rel(api_insp, api, "REST/HTTPS+JSON")
+
+Rel(l_auth, api, "Авторизация [HTTP/JSON]")
+
+p_dtp -[hidden]right- p_insp
+p_insp -[hidden]right- p_exp
+
+l_acc -[hidden]right- l_insp
+l_insp -[hidden]right- l_auth
+
+api_acc -[hidden]right- api_insp
+
+ui_form -[hidden]right- ui_upload
+ui_upload -[hidden]right- ui_sig
+
+p_dtp -[hidden]down- l_acc
+p_insp -[hidden]down- l_insp
+p_exp -[hidden]down- l_auth
+
+l_acc -[hidden]down- api_acc
+l_insp -[hidden]down- api_insp
+
+p_dtp -[hidden]down- ui_form
+p_insp -[hidden]down- ui_upload
+p_insp -[hidden]down- ui_sig
+
+api_acc -[hidden]down- api
+api_insp -[hidden]down- api
+
+l_auth -[hidden]down- api_acc
+
+@enduml
