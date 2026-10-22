@@ -1,0 +1,334 @@
+@startuml
+title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "API (FastAPI)"
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle frame
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+
+
+' =====================================================
+' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
+' =====================================================
+package "Слой API: контроллеры (FastAPI Router)" #E8F4FB {
+
+    class AccidentController {
+        - _service: IAccidentService
+        + __init__(service: IAccidentService) -> None
+        + register_claim(claim: AccidentClaim) -> AccidentClaim
+        + assign_expert(claim_id: UUID) -> AccidentClaim
+        + get_status(claim_id: UUID) -> AccidentStatus
+    }
+
+    class InspectionController {
+        - _service: IInspectionService
+        + __init__(service: IInspectionService) -> None
+        + submit_results(inspection: Inspection) -> Inspection
+        + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+    }
+}
+
+
+' =====================================================
+' СЛОЙ БИЗНЕС-ЛОГИКИ: СЕРВИСЫ
+' =====================================================
+package "Слой бизнес-логики: сервисы" #E8F4FB {
+
+    interface IAccidentService {
+        + register_claim(claim: AccidentClaim) -> AccidentClaim
+        + assign_expert(claim_id: UUID) -> AccidentClaim
+        + change_status(claim_id: UUID, status: AccidentStatus) -> AccidentClaim
+    }
+
+    class AccidentService {
+        - _repo: IAccidentRepository
+        - _audit: AuditService
+        - _assignment: AssignmentStrategy
+        + __init__(repo: IAccidentRepository, audit: AuditService, assignment: AssignmentStrategy) -> None
+        + register_claim(claim: AccidentClaim) -> AccidentClaim
+        + assign_expert(claim_id: UUID) -> AccidentClaim
+        + change_status(claim_id: UUID, status: AccidentStatus) -> AccidentClaim
+        - _audit_event(actor: str, action: str, entity_id: UUID) -> None
+    }
+
+    interface IInspectionService {
+        + submit_results(inspection: Inspection) -> Inspection
+        + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+    }
+
+    class InspectionService {
+        - _claims: IAccidentRepository
+        - _files: IFileRepository
+        - _audit: AuditService
+        - _tasks: TaskQueueFacade
+        - _ais: AisOsagoFacade
+        + __init__(claims: IAccidentRepository, files: IFileRepository, audit: AuditService, tasks: TaskQueueFacade, ais: AisOsagoFacade) -> None
+        + submit_results(inspection: Inspection) -> Inspection
+        + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+        - _check_policy(claim: AccidentClaim) -> bool
+        - _audit_event(actor: str, action: str, entity_id: UUID) -> None
+    }
+
+    class AuditService {
+        - _repo: IAccidentRepository
+        + __init__(repo: IAccidentRepository) -> None
+        + log(event: AuditEvent) -> None
+    }
+}
+
+
+' =====================================================
+' ПАТТЕРН STRATEGY: АЛГОРИТМЫ НАЗНАЧЕНИЯ ЭКСПЕРТА
+' =====================================================
+package "Strategy: алгоритмы назначения эксперта" #FDF3E3 {
+
+    interface AssignmentStrategy {
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+
+    class FreeExpertStrategy {
+        - _repo: IAccidentRepository
+        + __init__(repo: IAccidentRepository) -> None
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+
+    class RegionExpertStrategy {
+        - _repo: IAccidentRepository
+        + __init__(repo: IAccidentRepository) -> None
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ
+' =====================================================
+package "Слой интеграции: фасады" #EAF1FA {
+
+    class TaskQueueFacade {
+        - _session: Session
+        + __init__(session: Session) -> None
+        + enqueue(task: TaskItem) -> UUID
+    }
+
+    class AisOsagoFacade {
+        - _http: HTTPClient
+        + __init__(http: HTTPClient) -> None
+        + check_policy(claim: AccidentClaim) -> bool
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ДАННЫХ: РЕПОЗИТОРИИ
+' =====================================================
+package "Слой данных: репозитории" #EAF1FA {
+
+    interface IAccidentRepository {
+        + get_claim(claim_id: UUID) -> AccidentClaim | None
+        + save_claim(claim: AccidentClaim) -> AccidentClaim
+        + list_free_experts(region: str | None) -> list[UUID]
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + save_task(task: TaskItem) -> UUID
+    }
+
+    class AccidentRepository {
+        - _session: Session
+        + get_claim(claim_id: UUID) -> AccidentClaim | None
+        + save_claim(claim: AccidentClaim) -> AccidentClaim
+        + list_free_experts(region: str | None) -> list[UUID]
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + save_task(task: TaskItem) -> UUID
+    }
+
+    interface IFileRepository {
+        + save_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + save_signature(claim_id: UUID, signature: Signature) -> UUID
+        + save_pdf(claim_id: UUID, content: bytes) -> UUID
+        + get_pdf(claim_id: UUID) -> bytes | None
+    }
+
+    class FileRepository {
+        - _db: Database
+        - _fs: GridFS
+        + save_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + save_signature(claim_id: UUID, signature: Signature) -> UUID
+        + save_pdf(claim_id: UUID, content: bytes) -> UUID
+        + get_pdf(claim_id: UUID) -> bytes | None
+    }
+}
+
+
+' =====================================================
+' ДОМЕН: СУЩНОСТИ И ПЕРЕЧИСЛЕНИЯ
+' =====================================================
+package "Домен: сущности и перечисления" #F5F5F5 {
+
+    enum AccidentStatus {
+        NEW
+        ASSIGNED
+        INSPECTION
+        COMPLETED
+    }
+
+    enum TaskType {
+        PDF_PROTOCOL
+        POLICY_RECHECK
+    }
+
+    class AccidentClaim {
+        - claim_id: UUID
+        - number: str
+        - policy_number: str
+        - region: str
+        - status: AccidentStatus
+        - expert_id: UUID | None
+        - created_at: datetime
+        + assign(expert_id: UUID) -> None
+        + transition(status: AccidentStatus) -> None
+    }
+
+    class Inspection {
+        - inspection_id: UUID
+        - claim_id: UUID
+        - expert_id: UUID
+        - damage_found: bool
+        - notes: str
+        - completed_at: datetime
+    }
+
+    class Photo {
+        - photo_id: UUID
+        - meta: str
+        - content: bytes
+    }
+
+    class Signature {
+        - signature_id: UUID
+        - claim_id: UUID
+        - signed_by: str
+        - content: bytes
+        - verified: bool
+    }
+
+    class AuditEvent {
+        - event_id: UUID
+        - actor: str
+        - action: str
+        - entity_id: UUID
+        - occurred_at: datetime
+    }
+
+    class TaskItem {
+        - task_id: UUID
+        - type: TaskType
+        - claim_id: UUID
+        - created_at: datetime
+    }
+}
+
+
+' =====================================================
+' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+AccidentService ..|> IAccidentService
+InspectionService ..|> IInspectionService
+AccidentRepository ..|> IAccidentRepository
+FileRepository ..|> IFileRepository
+FreeExpertStrategy ..|> AssignmentStrategy
+RegionExpertStrategy ..|> AssignmentStrategy
+
+
+' =====================================================
+' СВЯЗИ: ИНЪЕКЦИЯ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' =====================================================
+AccidentController ..> IAccidentService : "DI"
+InspectionController ..> IInspectionService : "DI"
+
+AccidentService ..> IAccidentRepository : "DI"
+AccidentService ..> AuditService : "DI"
+AccidentService o--> AssignmentStrategy : "aggregation, DI\nподмена в рантайме"
+
+InspectionService ..> IAccidentRepository : "DI"
+InspectionService ..> IFileRepository : "DI"
+InspectionService ..> AuditService : "DI"
+InspectionService ..> TaskQueueFacade : "DI"
+InspectionService ..> AisOsagoFacade : "DI"
+
+AuditService ..> IAccidentRepository : "DI"
+FreeExpertStrategy ..> IAccidentRepository : "DI"
+RegionExpertStrategy ..> IAccidentRepository : "DI"
+
+
+' =====================================================
+' СВЯЗИ: СЕРВИСЫ -> ДОМЕН (создание / использование)
+' =====================================================
+AccidentService ..> AccidentClaim : "creates"
+AccidentService ..> AuditEvent : "creates"
+InspectionService ..> AuditEvent : "creates"
+InspectionService ..> TaskItem : "enqueues"
+AuditService ..> AuditEvent : "uses"
+
+
+' =====================================================
+' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
+' =====================================================
+TaskQueueFacade ..> TaskItem
+AisOsagoFacade ..> AccidentClaim
+AccidentRepository ..> AccidentClaim
+AccidentRepository ..> AuditEvent
+AccidentRepository ..> TaskItem
+FileRepository ..> Signature
+
+
+' =====================================================
+' СВЯЗИ: ВНУТРИ ДОМЕНА
+' =====================================================
+AccidentClaim "1" *-- "0..*" Photo
+AccidentClaim "1" *-- "0..1" Signature
+Inspection "0..*" --> "1" AccidentClaim
+AccidentClaim ..> AccidentStatus
+TaskItem ..> TaskType
+
+
+' =====================================================
+' УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ)
+' =====================================================
+AccidentController -[hidden]down- AccidentService
+InspectionController -[hidden]down- InspectionService
+AccidentService -[hidden]down- AssignmentStrategy
+AccidentService -[hidden]down- IAccidentRepository
+InspectionService -[hidden]down- IFileRepository
+AuditService -[hidden]down- IAccidentRepository
+IAccidentRepository -[hidden]down- AccidentRepository
+IFileRepository -[hidden]down- FileRepository
+AccidentRepository -[hidden]right- FileRepository
+FreeExpertStrategy -[hidden]right- RegionExpertStrategy
+
+
+' =====================================================
+' ПОЯСНЕНИЯ (SOLID, Strategy, соответствие компонентам
+' C4) убраны — переносятся в текст отчёта
+' =====================================================
+
+
+@enduml
