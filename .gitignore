@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Демонстрационные данные приложения (SQLite, загруженные фото, протоколы)
+/data/
+
 # C extensions
 *.so
 
