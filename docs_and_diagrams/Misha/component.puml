@@ -17,7 +17,7 @@ Container_Boundary(worker, "Worker [Python / Celery]") {
     ' --- Слой приема задач / consumers ---
     together {
         Component(c_margin, "MarginCalculationTask", "Celery Task", "Асинхронная задача:\nфоновый просчет маржи\nпериода и прибыльности", $tags="consumer")
-        Component(c_reconcile, "GatewayReconciliationTask", "Celery Task", "Периодическая задача (Cron):\nсверка зависших транзакций\nс платежной системой", $tags="consumer")
+        Component(c_reconcile, "GatewayReconciliationTask", "Celery Task", "Периодическая задача:\nсверка зависших транзакций\nс платежной системой", $tags="consumer")
     }
 
     ' --- Слой бизнес-логики ---
