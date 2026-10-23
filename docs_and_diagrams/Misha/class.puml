@@ -1,0 +1,308 @@
+@startuml
+title ИС ОСАГО, фин. контроль и маржа. UML CLASS DIAGRAM — компонент "Worker (Celery / Python)"
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle frame
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+
+
+' =====================================================
+' СЛОЙ ПРИЕМА ЗАДАЧ: CELERY TASKS
+' =====================================================
+package "Слой приема задач: Celery Tasks" #E8F4FB {
+
+    class MarginCalculationTask {
+        - _service: IMarginService
+        + __init__(service: IMarginService) -> None
+        + run(period_start: datetime, period_end: datetime) -> MarginReport
+    }
+
+    class GatewayReconciliationTask {
+        - _service: IReconciliationService
+        + __init__(service: IReconciliationService) -> None
+        + run() -> list[UUID]
+    }
+
+    class PdfGenerationTask {
+        - _service: IPdfService
+        + __init__(service: IPdfService) -> None
+        + run(claim_id: UUID) -> UUID
+    }
+
+    class ContractRegistrationTask {
+        - _service: IRegistrationService
+        + __init__(service: IRegistrationService) -> None
+        + run(claim_id: UUID) -> bool
+    }
+
+    class EmailNotificationTask {
+        - _service: INotificationService
+        + __init__(service: INotificationService) -> None
+        + run(notification_id: UUID) -> bool
+    }
+}
+
+
+' =====================================================
+' СЛОЙ БИЗНЕС-ЛОГИКИ: СЕРВИСЫ
+' =====================================================
+package "Слой бизнес-логики: сервисы" #E8F4FB {
+
+    interface IMarginService {
+        + calculate_margin(period_start: datetime, period_end: datetime) -> MarginReport
+    }
+
+    class MarginService {
+        - _audit: AuditService
+        - _tariffs: TariffRepository
+        - _audit_repo: AuditRepository
+        + __init__(audit: AuditService, tariffs: TariffRepository, audit_repo: AuditRepository) -> None
+        + calculate_margin(period_start: datetime, period_end: datetime) -> MarginReport
+        - _log_event(action: str) -> None
+    }
+
+    interface IReconciliationService {
+        + reconcile_payments() -> list[UUID]
+    }
+
+    class ReconciliationService {
+        - _pay_facade: PaymentGatewayFacade
+        - _audit_repo: AuditRepository
+        - _audit: AuditService
+        + __init__(pay_facade: PaymentGatewayFacade, audit_repo: AuditRepository, audit: AuditService) -> None
+        + reconcile_payments() -> list[UUID]
+    }
+
+    interface IPdfService {
+        + generate_protocol_pdf(claim_id: UUID) -> UUID
+    }
+
+    class PdfService {
+        - _files: FileRepository
+        - _audit_repo: AuditRepository
+        - _audit: AuditService
+        + __init__(files: FileRepository, audit_repo: AuditRepository, audit: AuditService) -> None
+        + generate_protocol_pdf(claim_id: UUID) -> UUID
+    }
+
+    interface IRegistrationService {
+        + register_contract(claim_id: UUID) -> bool
+    }
+
+    class RegistrationService {
+        - _ais_facade: AisOsagoFacade
+        - _audit_repo: AuditRepository
+        - _audit: AuditService
+        + __init__(ais_facade: AisOsagoFacade, audit_repo: AuditRepository, audit: AuditService) -> None
+        + register_contract(claim_id: UUID) -> bool
+    }
+
+    interface INotificationService {
+        + send_email(notification_id: UUID) -> bool
+    }
+
+    class NotificationService {
+        - _email_facade: EmailFacade
+        - _audit_repo: AuditRepository
+        - _audit: AuditService
+        + __init__(email_facade: EmailFacade, audit_repo: AuditRepository, audit: AuditService) -> None
+        + send_email(notification_id: UUID) -> bool
+    }
+
+    class AuditService {
+        - _repo: AuditRepository
+        + __init__(repo: AuditRepository) -> None
+        + log(event: AuditEvent) -> None
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ И КЛИЕНТЫ
+' =====================================================
+package "Слой интеграции: фасады" #EAF1FA {
+
+    class PaymentGatewayFacade {
+        - _http: HTTPClient
+        + __init__(http: HTTPClient) -> None
+        + check_pending_transactions() -> list[dict]
+    }
+
+    class AisOsagoFacade {
+        - _http: HTTPClient
+        + __init__(http: HTTPClient) -> None
+        + register_policy(claim_data: dict) -> bool
+        + recheck_policy(policy_number: str) -> bool
+    }
+
+    class EmailFacade {
+        - _smtp: SMTPClient
+        + __init__(smtp: SMTPClient) -> None
+        + send_mail(to: str, subject: str, attachment: bytes) -> bool
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ДАННЫХ: РЕПОЗИТОРИИ
+' =====================================================
+package "Слой данных: репозитории" #EAF1FA {
+
+    class AuditRepository {
+        - _session: Session
+        + get_pending_tasks() -> list[TaskItem]
+        + save_task_status(task_id: UUID, status: str) -> None
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + get_transactions_for_reconciliation() -> list[dict]
+    }
+
+    class TariffRepository {
+        - _session: Session
+        + get_tariffs_for_period(start: datetime, end: datetime) -> list[dict]
+        + get_coefficients() -> dict
+    }
+
+    class FileRepository {
+        - _db: Database
+        - _fs: GridFS
+        + get_claim_data(claim_id: UUID) -> dict
+        + save_pdf(claim_id: UUID, content: bytes) -> UUID
+        + get_pdf(claim_id: UUID) -> bytes | None
+    }
+}
+
+
+' =====================================================
+' ДОМЕН: СУЩНОСТИ И ПЕРЕЧИСЛЕНИЯ
+' =====================================================
+package "Домен: сущности и перечисления" #F5F5F5 {
+
+    enum TaskType {
+        PDF_PROTOCOL
+        POLICY_RECHECK
+        MARGIN_CALC
+        CONTRACT_REG
+        EMAIL_SEND
+    }
+
+    class TaskItem {
+        - task_id: UUID
+        - type: TaskType
+        - claim_id: UUID
+        - status: str
+        - created_at: datetime
+    }
+
+    class MarginReport {
+        - report_id: UUID
+        - period_start: datetime
+        - period_end: datetime
+        - total_premium: float
+        - total_commission: float
+        - net_margin: float
+        - calculated_at: datetime
+    }
+
+    class AuditEvent {
+        - event_id: UUID
+        - actor: str
+        - action: str
+        - entity_id: UUID
+        - occurred_at: datetime
+    }
+}
+
+
+' =====================================================
+' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+MarginService ..|> IMarginService
+ReconciliationService ..|> IReconciliationService
+PdfService ..|> IPdfService
+RegistrationService ..|> IRegistrationService
+NotificationService ..|> INotificationService
+
+
+' =====================================================
+' СВЯЗИ: ИНЪЕКЦИЯ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' =====================================================
+MarginCalculationTask ..> IMarginService : "DI"
+GatewayReconciliationTask ..> IReconciliationService : "DI"
+PdfGenerationTask ..> IPdfService : "DI"
+ContractRegistrationTask ..> IRegistrationService : "DI"
+EmailNotificationTask ..> INotificationService : "DI"
+
+MarginService ..> AuditService : "DI"
+MarginService ..> TariffRepository : "DI"
+MarginService ..> AuditRepository : "DI"
+
+ReconciliationService ..> PaymentGatewayFacade : "DI"
+ReconciliationService ..> AuditRepository : "DI"
+ReconciliationService ..> AuditService : "DI"
+
+PdfService ..> FileRepository : "DI"
+PdfService ..> AuditRepository : "DI"
+PdfService ..> AuditService : "DI"
+
+RegistrationService ..> AisOsagoFacade : "DI"
+RegistrationService ..> AuditRepository : "DI"
+RegistrationService ..> AuditService : "DI"
+
+NotificationService ..> EmailFacade : "DI"
+NotificationService ..> AuditRepository : "DI"
+NotificationService ..> AuditService : "DI"
+
+AuditService ..> AuditRepository : "DI"
+
+
+' =====================================================
+' СВЯЗИ: СЕРВИСЫ -> ДОМЕН
+' =====================================================
+MarginService ..> MarginReport : "creates"
+MarginService ..> AuditEvent : "creates"
+ReconciliationService ..> AuditEvent : "creates"
+PdfService ..> AuditEvent : "creates"
+RegistrationService ..> AuditEvent : "creates"
+NotificationService ..> AuditEvent : "creates"
+
+
+' =====================================================
+' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
+' =====================================================
+AuditRepository ..> TaskItem
+AuditRepository ..> AuditEvent
+FileRepository ..> MarginReport
+
+
+' =====================================================
+' СВЯЗИ: ВНУТРИ ДОМЕНА
+' =====================================================
+TaskItem ..> TaskType
+
+
+' =====================================================
+' УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ)
+' =====================================================
+MarginCalculationTask -[hidden]right- GatewayReconciliationTask
+MarginService -[hidden]right- ReconciliationService
+PaymentGatewayFacade -[hidden]right- AisOsagoFacade
+AuditRepository -[hidden]right- TariffRepository
+
+@enduml
