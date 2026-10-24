@@ -1,5 +1,11 @@
 # Insurance-system
 Insurance system pet project
+<img width="1862" height="893" alt="image" src="https://github.com/user-attachments/assets/61deace7-987f-474a-b498-6133c30a6005" />
+<img width="1842" height="870" alt="image" src="https://github.com/user-attachments/assets/a48ab005-df9b-4947-82fd-b8f178c057a1" />
+<img width="1699" height="891" alt="image" src="https://github.com/user-attachments/assets/5eeda4f4-5b16-4137-bcff-91c1045a69ed" />
+<img width="1344" height="833" alt="image" src="https://github.com/user-attachments/assets/d934ab63-6e72-4726-aea1-cd3c832dfcdf" />
+db photo-
+<img width="1171" height="724" alt="image" src="https://github.com/user-attachments/assets/3826c191-9160-4295-aa85-c7ab528167ad" />
 
 
 pip install -r requirements.txt
