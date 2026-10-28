@@ -1,0 +1,170 @@
+@startuml
+title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "Web App / InspectionLogic"
+
+' ===== СТИЛИЗАЦИЯ (при сдаче вынести в main.puml по п. 4.4 методички) =====
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle frame
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+' ==========================================================================
+
+
+' =====================================================
+' СЛОЙ ЛОГИКИ: КОНТЕКСТ (React Hook)
+' =====================================================
+package "Слой логики: контекст InspectionLogic" #E8F4FB {
+
+    class InspectionLogic {
+        - _strategy: DamageAssessmentStrategy
+        + __init__(strategy: DamageAssessmentStrategy) -> None
+        + set_strategy(strategy: DamageAssessmentStrategy) -> None
+        + assess(data: DamageData) -> DamageAssessment
+        - _validate(data: DamageData) -> None
+    }
+}
+
+
+' =====================================================
+' ПАТТЕРН STRATEGY: АЛГОРИТМЫ ОЦЕНКИ УЩЕРБА
+' =====================================================
+package "Strategy: алгоритмы оценки ущерба" #FDF3E3 {
+
+    interface DamageAssessmentStrategy {
+        + calculate(data: DamageData) -> DamageAssessment
+    }
+
+    class MinorDamageStrategy {
+        + calculate(data: DamageData) -> DamageAssessment
+    }
+
+    class MediumDamageStrategy {
+        + calculate(data: DamageData) -> DamageAssessment
+    }
+
+    class TotalLossStrategy {
+        + calculate(data: DamageData) -> DamageAssessment
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ИНТЕГРАЦИИ: API-КЛИЕНТ
+' =====================================================
+package "Слой интеграции: API-клиент" #EAF1FA {
+
+    class InspectionApiClient {
+        - _base_url: str
+        - _http: HTTPClient
+        + __init__(base_url: str, http: HTTPClient) -> None
+        + submit_results(assessment: DamageAssessment) -> AssessmentResponse
+    }
+}
+
+
+' =====================================================
+' ДОМЕН: МОДЕЛИ И ПЕРЕЧИСЛЕНИЯ
+' =====================================================
+package "Домен: модели и перечисления" #F5F5F5 {
+
+    enum DamageCategory {
+        MINOR
+        MEDIUM
+        TOTAL_LOSS
+    }
+
+    class DamageData {
+        - vehicle_age: int
+        - repair_cost: Decimal
+        - market_value: Decimal
+        - photos_count: int
+        - has_signature: bool
+    }
+
+    class DamageAssessment {
+        - category: DamageCategory
+        - payout: Decimal
+        - requires_expert: bool
+        - requires_additional_photos: bool
+    }
+
+    class AssessmentResponse {
+        - assessment_id: UUID
+        - accepted: bool
+        - server_message: str
+    }
+}
+
+
+' =====================================================
+' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+MinorDamageStrategy ..|> DamageAssessmentStrategy
+MediumDamageStrategy ..|> DamageAssessmentStrategy
+TotalLossStrategy ..|> DamageAssessmentStrategy
+
+
+' =====================================================
+' СВЯЗИ: ИНЪЕКЦИЯ ЗАВИСИМОСТЕЙ (DIP)
+' =====================================================
+InspectionLogic o--> DamageAssessmentStrategy : "aggregation, DI\nподмена в рантайме"
+InspectionApiClient ..> DamageAssessment : "DI"
+
+
+' =====================================================
+' СВЯЗИ: КОНТЕКСТ -> ДОМЕН
+' =====================================================
+InspectionLogic ..> DamageData : "uses"
+InspectionLogic ..> DamageAssessment : "creates"
+InspectionLogic ..> InspectionApiClient : "delegates"
+
+InspectionApiClient ..> AssessmentResponse : "creates"
+
+
+' =====================================================
+' СВЯЗИ: СТРАТЕГИИ -> ДОМЕН
+' =====================================================
+MinorDamageStrategy ..> DamageData : "uses"
+MinorDamageStrategy ..> DamageAssessment : "creates"
+MediumDamageStrategy ..> DamageData : "uses"
+MediumDamageStrategy ..> DamageAssessment : "creates"
+TotalLossStrategy ..> DamageData : "uses"
+TotalLossStrategy ..> DamageAssessment : "creates"
+
+
+' =====================================================
+' СВЯЗИ: ВНУТРИ ДОМЕНА
+' =====================================================
+DamageAssessment ..> DamageCategory
+
+
+' =====================================================
+' УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ)
+' =====================================================
+InspectionLogic -[hidden]down- DamageAssessmentStrategy
+InspectionLogic -[hidden]right- InspectionApiClient
+
+MinorDamageStrategy -[hidden]right- MediumDamageStrategy
+MediumDamageStrategy -[hidden]right- TotalLossStrategy
+
+DamageData -[hidden]right- DamageAssessment
+DamageAssessment -[hidden]right- AssessmentResponse
+
+DamageCategory -[hidden]down- DamageAssessment
+
+@enduml
