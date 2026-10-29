@@ -1,0 +1,403 @@
+@startuml
+title ИС ОСАГО, фин. контроль и маржа. UML CLASS DIAGRAM — компонент "Worker (Python / Celery)" (редакция после ревью)
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam packageStyle frame
+hide stereotype
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+    BackgroundColor<<changed>> #F4FAFE
+    BorderColor<<changed>> #E8590C
+    BorderThickness<<changed>> 3
+    HeaderBackgroundColor<<changed>> #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+    BackgroundColor<<changed>> #F4FAFE
+    BorderColor<<changed>> #E8590C
+    HeaderBackgroundColor<<changed>> #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+    BackgroundColor<<changed>> #F4FAFE
+    BorderColor<<changed>> #E8590C
+    HeaderBackgroundColor<<changed>> #6cc2f5
+}
+legend right
+  Оранжевая рамка — класс добавлен или изменен на ревью.
+  Остальные классы — как в исходной диаграмме Миши.
+endlegend
+
+
+' =====================================================
+' ПРИЕМ ЗАДАЧ: OUTBOX И РАСПИСАНИЕ
+' =====================================================
+package "Прием задач: OutboxPoller и Scheduler" #FDF1E7 {
+
+    class OutboxPoller <<changed>> {
+        - _repo: AuditRepository
+        - _tasks: dict[TaskType, Callable]
+        + poll() -> int
+        - _dispatch(item: TaskItem) -> None
+    }
+
+    class Scheduler <<changed>> {
+        - _reconciliation: GatewayReconciliationTask
+        - _report: ReportTask
+        - _cleanup: FileCleanupTask
+        + register_schedule() -> None
+    }
+}
+
+
+' =====================================================
+' ЗАДАЧИ: CELERY TASKS
+' =====================================================
+package "Задачи: Celery Tasks" #E8F4FB {
+
+    class RegistrationTask <<changed>> {
+        - _service: IContractService
+        + run(claim_id: UUID, recheck: bool) -> bool
+    }
+
+    class PdfTask <<changed>> {
+        - _service: IDocumentService
+        + run(claim_id: UUID) -> UUID
+    }
+
+    class FileCleanupTask <<changed>> {
+        - _service: IDocumentService
+        + run(older_than: datetime) -> int
+    }
+
+    class NotificationTask <<changed>> {
+        - _service: INotificationService
+        + run(item: TaskItem) -> bool
+    }
+
+    class MarginCalculationTask {
+        - _service: IMarginService
+        + run(period_start: datetime, period_end: datetime) -> MarginReport
+    }
+
+    class ReportTask <<changed>> {
+        - _service: IReportService
+        + run(period_start: datetime, period_end: datetime) -> bool
+    }
+
+    class GatewayReconciliationTask {
+        - _service: IReconciliationService
+        + run() -> list[UUID]
+    }
+}
+
+
+' =====================================================
+' СЕРВИСЫ
+' =====================================================
+package "Слой бизнес-логики: сервисы" #E8F4FB {
+
+    interface IContractService <<changed>> {
+        + register_contract(claim_id: UUID) -> bool
+        + recheck_policy(claim_id: UUID) -> bool
+    }
+
+    class ContractService <<changed>> {
+        - _ais_facade: AisOsagoFacade
+        - _audit: AuditService
+        + register_contract(claim_id: UUID) -> bool
+        + recheck_policy(claim_id: UUID) -> bool
+    }
+
+    interface IDocumentService <<changed>> {
+        + generate_protocol_pdf(claim_id: UUID) -> UUID
+        + cleanup_expired_files(older_than: datetime) -> int
+    }
+
+    class DocumentService <<changed>> {
+        - _files: FileRepository
+        - _audit: AuditService
+        + generate_protocol_pdf(claim_id: UUID) -> UUID
+        + cleanup_expired_files(older_than: datetime) -> int
+    }
+
+    interface INotificationService {
+        + send_email(item: TaskItem) -> bool
+    }
+
+    class NotificationService <<changed>> {
+        - _email_facade: EmailFacade
+        - _files: FileRepository
+        - _audit: AuditService
+        + send_email(item: TaskItem) -> bool
+    }
+
+    interface IMarginService {
+        + calculate_margin(period_start: datetime, period_end: datetime) -> MarginReport
+    }
+
+    class MarginService <<changed>> {
+        - _tariffs: TariffRepository
+        - _transactions: TransactionRepository
+        - _audit: AuditService
+        + calculate_margin(period_start: datetime, period_end: datetime) -> MarginReport
+    }
+
+    interface IReportService <<changed>> {
+        + send_report(period_start: datetime, period_end: datetime) -> bool
+    }
+
+    class ReportService <<changed>> {
+        - _tariffs: TariffRepository
+        - _email_facade: EmailFacade
+        - _audit: AuditService
+        + send_report(period_start: datetime, period_end: datetime) -> bool
+    }
+
+    interface IReconciliationService {
+        + reconcile_payments() -> list[UUID]
+    }
+
+    class ReconciliationService <<changed>> {
+        - _pay_facade: PaymentGatewayFacade
+        - _transactions: TransactionRepository
+        - _audit: AuditService
+        + reconcile_payments() -> list[UUID]
+    }
+
+    class AuditService <<changed>> {
+        - _repo: AuditRepository
+        + log(event: AuditEvent) -> None
+        + set_task_status(task_id: UUID, status: TaskStatus) -> None
+    }
+}
+
+
+' =====================================================
+' ФАСАДЫ
+' =====================================================
+package "Слой интеграции: фасады" #EAF1FA {
+
+    class AisOsagoFacade {
+        - _http: HTTPClient
+        + register_policy(claim_data: dict) -> bool
+        + recheck_policy(policy_number: str) -> bool
+    }
+
+    class EmailFacade {
+        - _smtp: SMTPClient
+        + send_mail(to: str, subject: str, attachment: bytes | None) -> bool
+    }
+
+    class PaymentGatewayFacade {
+        - _http: HTTPClient
+        + check_pending_transactions() -> list[dict]
+    }
+}
+
+
+' =====================================================
+' РЕПОЗИТОРИИ
+' =====================================================
+package "Слой данных: репозитории" #EAF1FA {
+
+    class FileRepository <<changed>> {
+        - _db: Database
+        - _fs: GridFS
+        + get_claim_data(claim_id: UUID) -> dict
+        + save_pdf(claim_id: UUID, content: bytes) -> UUID
+        + get_pdf(claim_id: UUID) -> bytes | None
+        + delete_expired(older_than: datetime) -> int
+    }
+
+    class TariffRepository <<changed>> {
+        - _session: Session
+        + get_coefficients() -> dict
+        + save_margin_result(report: MarginReport) -> None
+        + get_margin_results(start: datetime, end: datetime) -> list[MarginReport]
+    }
+
+    class TransactionRepository <<changed>> {
+        - _session: Session
+        + get_for_period(start: datetime, end: datetime) -> list[Transaction]
+        + get_pending() -> list[Transaction]
+        + update_status(transaction_id: UUID, status: str) -> None
+    }
+
+    class AuditRepository <<changed>> {
+        - _session: Session
+        + get_pending_tasks() -> list[TaskItem]
+        + save_task_status(task_id: UUID, status: TaskStatus) -> None
+        + save_audit(event: AuditEvent) -> AuditEvent
+    }
+}
+
+
+' =====================================================
+' ДОМЕН
+' =====================================================
+package "Домен: сущности и перечисления" #F5F5F5 {
+
+    enum TaskType <<changed>> {
+        PDF_PROTOCOL
+        POLICY_RECHECK
+        MARGIN_CALC
+        CONTRACT_REG
+        EMAIL_SEND
+        REPORT
+    }
+
+    enum TaskStatus <<changed>> {
+        NEW
+        IN_PROGRESS
+        DONE
+        FAILED
+    }
+
+    class TaskItem <<changed>> {
+        - task_id: UUID
+        - type: TaskType
+        - claim_id: UUID
+        - status: TaskStatus
+        - created_at: datetime
+    }
+
+    class Transaction <<changed>> {
+        - transaction_id: UUID
+        - claim_id: UUID
+        - amount: float
+        - commission: float
+        - status: str
+        - created_at: datetime
+    }
+
+    class MarginReport {
+        - report_id: UUID
+        - period_start: datetime
+        - period_end: datetime
+        - total_premium: float
+        - total_commission: float
+        - net_margin: float
+        - calculated_at: datetime
+    }
+
+    class AuditEvent {
+        - event_id: UUID
+        - actor: str
+        - action: str
+        - entity_id: UUID
+        - occurred_at: datetime
+    }
+}
+
+
+' =====================================================
+' РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+IContractService <|.. ContractService
+IDocumentService <|.. DocumentService
+INotificationService <|.. NotificationService
+IMarginService <|.. MarginService
+IReportService <|.. ReportService
+IReconciliationService <|.. ReconciliationService
+
+
+' =====================================================
+' ПРИЕМ ЗАДАЧ -> ЗАДАЧИ
+' =====================================================
+OutboxPoller ..> RegistrationTask : "запускает"
+OutboxPoller ..> PdfTask : "запускает"
+OutboxPoller ..> NotificationTask : "запускает"
+OutboxPoller ..> MarginCalculationTask : "запускает"
+OutboxPoller ..> ReportTask : "запускает"
+OutboxPoller ..> AuditRepository : "DI"
+
+Scheduler ..> GatewayReconciliationTask : "по расписанию"
+Scheduler ..> ReportTask : "по расписанию"
+Scheduler ..> FileCleanupTask : "по расписанию"
+
+
+' =====================================================
+' DI ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' =====================================================
+RegistrationTask ..> IContractService : "DI"
+PdfTask ..> IDocumentService : "DI"
+FileCleanupTask ..> IDocumentService : "DI"
+NotificationTask ..> INotificationService : "DI"
+MarginCalculationTask ..> IMarginService : "DI"
+ReportTask ..> IReportService : "DI"
+GatewayReconciliationTask ..> IReconciliationService : "DI"
+
+ContractService ..> AisOsagoFacade : "DI"
+ContractService ..> AuditService : "DI"
+
+DocumentService ..> FileRepository : "DI"
+DocumentService ..> AuditService : "DI"
+
+NotificationService ..> EmailFacade : "DI"
+NotificationService ..> FileRepository : "DI"
+NotificationService ..> AuditService : "DI"
+
+MarginService ..> TariffRepository : "DI"
+MarginService ..> TransactionRepository : "DI"
+MarginService ..> AuditService : "DI"
+
+ReportService ..> TariffRepository : "DI"
+ReportService ..> EmailFacade : "DI"
+ReportService ..> AuditService : "DI"
+
+ReconciliationService ..> PaymentGatewayFacade : "DI"
+ReconciliationService ..> TransactionRepository : "DI"
+ReconciliationService ..> AuditService : "DI"
+
+AuditService ..> AuditRepository : "DI"
+
+
+' =====================================================
+' СЕРВИСЫ, РЕПОЗИТОРИИ -> ДОМЕН
+' =====================================================
+MarginService ..> MarginReport : "creates"
+AuditService ..> AuditEvent : "creates"
+TariffRepository ..> MarginReport
+TransactionRepository ..> Transaction
+AuditRepository ..> TaskItem
+AuditRepository ..> AuditEvent
+TaskItem ..> TaskType
+TaskItem ..> TaskStatus
+
+
+' LAYOUT_PLACEHOLDER
+' =====================================================
+' LAYOUT
+' =====================================================
+OutboxPoller -[hidden]right- Scheduler
+RegistrationTask -[hidden]right- PdfTask
+PdfTask -[hidden]right- FileCleanupTask
+FileCleanupTask -[hidden]right- NotificationTask
+NotificationTask -[hidden]right- MarginCalculationTask
+MarginCalculationTask -[hidden]right- ReportTask
+ReportTask -[hidden]right- GatewayReconciliationTask
+AisOsagoFacade -[hidden]right- EmailFacade
+EmailFacade -[hidden]right- PaymentGatewayFacade
+FileRepository -[hidden]right- TariffRepository
+TariffRepository -[hidden]right- TransactionRepository
+TransactionRepository -[hidden]right- AuditRepository
+ContractService -[hidden]right- DocumentService
+DocumentService -[hidden]right- NotificationService
+NotificationService -[hidden]right- AuditService
+MarginService -[hidden]right- ReportService
+ReportService -[hidden]right- ReconciliationService
+ContractService -[hidden]down- MarginService
+DocumentService -[hidden]down- ReportService
+NotificationService -[hidden]down- ReconciliationService
+
+@enduml

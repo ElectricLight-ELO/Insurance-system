@@ -1,0 +1,103 @@
+@startuml
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+skinparam wrapWidth 220
+skinparam maxMessageSize 220
+skinparam nodesep 40
+skinparam ranksep 60
+
+title Web App (React SPA) — компоненты
+
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness="4", $legendText="Изменено / добавлено на ревью")
+AddRelTag("async", $lineStyle=DashedLine(), $legendText="Асинхронная связь (уровень 2)")
+AddRelTag("rbac", $lineColor="#7048E8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $lineColor="#8C96A0", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+
+
+Container_Boundary(bnd, "Web App — React SPA") {
+  ' --- Маршруты ---
+  Component(rt, "AppRouter", "React Router", "Защита страниц по роли: гость, клиент,\nагент, менеджер, диспетчер, эксперт", $tags="changed")
+  ' --- Страницы ---
+  Component(p_calc, "CalculatorPage", "React Page", "Расчет стоимости\n(в т.ч. для гостя)", $tags="changed")
+  Component(p_buy, "CheckoutPage", "React Page", "Оформление\nи оплата полиса", $tags="changed")
+  Component(p_cab, "CabinetPage", "React Page", "Личный кабинет,\nскачивание полиса", $tags="changed")
+  Component(p_agent, "AgentWorkplace", "React Page", "Оформление полисов\nи договоров агентом", $tags="changed")
+  Component(p_mgr, "ManagerWorkplace", "React Page", "Отчеты, агенты,\nсложные случаи", $tags="changed")
+  Component(p_acc, "AccidentPage", "React Page", "Регистрация\nзаявления о ДТП")
+  Component(p_disp, "DispatcherPage", "React Page", "Заявление по звонку,\nназначение эксперта", $tags="changed")
+  Component(p_exp, "ExpertDashboard", "React Page", "Назначенные\nэксперту дела")
+  Component(p_insp, "InspectionPage", "React Page", "Осмотр, фото,\nподписание акта")
+  ' --- Логика и UI ---
+  Component(l_auth, "AuthLogic", "React Context", "Токен и роль\nпользователя")
+  Component(l_pol, "PolicyLogic", "React Hooks", "Расчет, оформление,\nполисы и отчеты", $tags="changed")
+  Component(u_form, "FormWizard", "React Component", "Пошаговая форма\nввода данных ДТП")
+  Component(l_acc, "AccidentLogic", "React Hooks", "Черновик заявления,\nвалидация полей")
+  Component(u_photo, "PhotoUploader", "React Component", "Превью; проверка\nформата и размера", $tags="changed")
+  Component(l_exp, "ExpertCasesLogic", "React Hooks", "Список дел,\nфильтры, статусы", $tags="changed")
+  Component(l_insp, "InspectionLogic", "React Hooks", "Сбор результатов;\nвыплату не считает", $tags="changed")
+  Component(u_sig, "SignaturePad", "React Component", "Канвас для\nэлектронной подписи")
+  ' --- API-клиенты ---
+  Component(a_auth, "AuthApiClient", "TypeScript", "Вход по коду,\nобновление токена", $tags="changed")
+  Component(a_pol, "PolicyApiClient", "TypeScript", "Расчет, оформление,\nоплата, PDF полиса", $tags="changed")
+  Component(a_acc, "AccidentApiClient", "TypeScript", "Заявления, статусы,\nназначение, дела", $tags="changed")
+  Component(a_insp, "InspectionApiClient", "TypeScript", "Фото, результаты,\nподпись")
+  ' --- HTTP ---
+  Component(http, "HttpClient", "axios", "Токен в каждом запросе,\n401/403, повторы", $tags="changed")
+}
+
+Container_Ext(api, "API", "FastAPI", "REST/HTTPS JSON — расчет премии, оформление,\nоплата, RBAC, фиксация ДТП, администрирование,\nтарифы, финансовый контроль, выдача PDF")
+
+Rel_D(rt, p_calc, "")
+Rel_D(rt, p_buy, "")
+Rel_D(rt, p_cab, "")
+Rel_D(rt, p_agent, "")
+Rel_D(rt, p_mgr, "")
+Rel_D(rt, p_acc, "")
+Rel_D(rt, p_disp, "")
+Rel_D(rt, p_exp, "")
+Rel_D(rt, p_insp, "")
+Rel_D(rt, l_auth, "Проверка роли", $tags="rbac")
+Rel_D(p_calc, l_pol, "")
+Rel_D(p_buy, l_pol, "")
+Rel_D(p_cab, l_pol, "")
+Rel_D(p_agent, l_pol, "")
+Rel_D(p_mgr, l_pol, "")
+Rel_D(p_acc, l_acc, "")
+Rel_D(p_acc, u_form, "")
+Rel_D(p_disp, l_acc, "")
+Rel_D(p_exp, l_exp, "")
+Rel_D(p_insp, l_insp, "")
+Rel_D(p_insp, u_photo, "")
+Rel_D(p_insp, u_sig, "")
+Rel_D(l_auth, a_auth, "")
+Rel_D(l_pol, a_pol, "")
+Rel_D(l_acc, a_acc, "")
+Rel_D(l_exp, a_acc, "")
+Rel_D(l_insp, a_insp, "")
+Rel_D(a_auth, http, "")
+Rel_D(a_pol, http, "")
+Rel_D(a_acc, http, "")
+Rel_D(a_insp, http, "")
+Rel_U(http, l_auth, "Берет токен", $tags="rbac")
+Rel_D(http, api, "Расчет, оформление, оплата,\nрезультаты осмотра, скачивание полиса", "REST/HTTPS, JSON")
+
+Lay_R(p_calc, p_buy)
+Lay_R(p_buy, p_cab)
+Lay_R(p_cab, p_agent)
+Lay_R(p_agent, p_mgr)
+Lay_R(p_mgr, p_acc)
+Lay_R(p_acc, p_disp)
+Lay_R(p_disp, p_exp)
+Lay_R(p_exp, p_insp)
+Lay_R(l_auth, l_pol)
+Lay_R(l_pol, u_form)
+Lay_R(u_form, l_acc)
+Lay_R(l_acc, u_photo)
+Lay_R(u_photo, l_exp)
+Lay_R(l_exp, l_insp)
+Lay_R(l_insp, u_sig)
+Lay_R(a_auth, a_pol)
+Lay_R(a_pol, a_acc)
+Lay_R(a_acc, a_insp)
+SHOW_LEGEND()
+@enduml

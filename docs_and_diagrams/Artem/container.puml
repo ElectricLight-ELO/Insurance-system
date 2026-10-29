@@ -61,7 +61,7 @@ Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и 
 
 
 Rel(worker, db_audit, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы,\nсверяет оплаты без задач", "SQL")
-Rel(worker, bd_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
+' Rel(worker, bd_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
 
 
 Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")

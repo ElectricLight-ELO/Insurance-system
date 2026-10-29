@@ -1,0 +1,89 @@
+@startuml
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+skinparam wrapWidth 220
+skinparam maxMessageSize 220
+skinparam nodesep 40
+skinparam ranksep 60
+
+title Backoffice (React SPA) — компоненты
+
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness="4", $legendText="Изменено / добавлено на ревью")
+AddRelTag("async", $lineStyle=DashedLine(), $legendText="Асинхронная связь (уровень 2)")
+AddRelTag("rbac", $lineColor="#7048E8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $lineColor="#8C96A0", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+
+
+Container_Boundary(bnd, "Backoffice — React SPA") {
+  ' --- Маршруты ---
+  Component(rt, "AppRouter", "React Router", "Защита страниц по роли: админ,\nподдержка, ИБ, бухгалтер")
+  ' --- Страницы ---
+  Component(p_login, "LoginPage", "React Page", "Вход по\nодноразовому коду")
+  Component(p_users, "UsersRolesPage", "React Page", "Пользователи\nи роли")
+  Component(p_tar, "TariffsPage", "React Page", "Тарифные сетки\nи коэффициенты")
+  Component(p_task, "TasksPage", "React Page", "Сбойные задачи,\nперезапуск")
+  Component(p_pol, "PolicySearchPage", "React Page", "Поиск полисов,\nстатусы платежей")
+  Component(p_aud, "AuditLogPage", "React Page", "Журнал аудита,\nрасследования")
+  Component(p_fin, "FinanceDashboard", "React Page", "Маржа, оплаты,\nсчета и акты")
+  ' --- Логика ---
+  Component(l_auth, "AuthLogic", "React Context", "Токен и роль\nпользователя")
+  Component(l_adm, "AdminLogic", "React Hooks", "Формы пользователей,\nролей и тарифов")
+  Component(l_ops, "OperationsLogic", "React Hooks", "Задачи, поиск\nполисов, статусы")
+  Component(l_aud, "AuditLogic", "React Hooks", "Фильтры журнала,\nвыгрузка")
+  Component(l_fin, "FinanceLogic", "React Hooks", "Дашборд маржи,\nсчета и акты")
+  ' --- API-клиенты ---
+  Component(a_auth, "AuthApiClient", "TypeScript", "Запрос и проверка\nкода, токен")
+  Component(a_adm, "AdminApiClient", "TypeScript", "Пользователи, роли,\nтарифы")
+  Component(a_ops, "OperationsApiClient", "TypeScript", "Задачи, полисы,\nплатежи")
+  Component(a_aud, "AuditApiClient", "TypeScript", "Журнал аудита")
+  Component(a_fin, "FinanceApiClient", "TypeScript", "Маржа, оплаты,\nсчета и акты")
+  ' --- HTTP ---
+  Component(http, "HttpClient", "axios", "Токен в каждом запросе,\n401/403, повторы")
+}
+
+Container_Ext(api, "API", "FastAPI", "REST/HTTPS JSON — расчет премии, оформление,\nоплата, RBAC, фиксация ДТП, администрирование,\nтарифы, финансовый контроль, выдача PDF")
+
+Rel_D(rt, p_login, "")
+Rel_D(rt, p_users, "")
+Rel_D(rt, p_tar, "")
+Rel_D(rt, p_task, "")
+Rel_D(rt, p_pol, "")
+Rel_D(rt, p_aud, "")
+Rel_D(rt, p_fin, "")
+Rel_D(rt, l_auth, "Проверка роли", $tags="rbac")
+Rel_D(p_login, l_auth, "")
+Rel_D(p_users, l_adm, "")
+Rel_D(p_tar, l_adm, "")
+Rel_D(p_task, l_ops, "")
+Rel_D(p_pol, l_ops, "")
+Rel_D(p_aud, l_aud, "")
+Rel_D(p_fin, l_fin, "")
+Rel_D(l_auth, a_auth, "")
+Rel_D(l_adm, a_adm, "")
+Rel_D(l_ops, a_ops, "")
+Rel_D(l_aud, a_aud, "")
+Rel_D(l_fin, a_fin, "")
+Rel_D(a_auth, http, "")
+Rel_D(a_adm, http, "")
+Rel_D(a_ops, http, "")
+Rel_D(a_aud, http, "")
+Rel_D(a_fin, http, "")
+Rel_U(http, l_auth, "Берет токен", $tags="rbac")
+Rel_D(http, api, "Администрирование, тарифы, аудит,\nдашборд, управление задачами", "REST/HTTPS, JSON")
+
+Lay_R(p_login, p_users)
+Lay_R(p_users, p_tar)
+Lay_R(p_tar, p_task)
+Lay_R(p_task, p_pol)
+Lay_R(p_pol, p_aud)
+Lay_R(p_aud, p_fin)
+Lay_R(l_auth, l_adm)
+Lay_R(l_adm, l_ops)
+Lay_R(l_ops, l_aud)
+Lay_R(l_aud, l_fin)
+Lay_R(a_auth, a_adm)
+Lay_R(a_adm, a_ops)
+Lay_R(a_ops, a_aud)
+Lay_R(a_aud, a_fin)
+SHOW_LEGEND()
+@enduml
