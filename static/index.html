@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ИС ОСАГО — фиксация ДТП (демо)</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>ИС ОСАГО · Фиксация ДТП</h1>
+    <span class="badge">демо API (FastAPI)</span>
+  </header>
+
+  <main class="layout">
+    <section class="card" aria-labelledby="register-title">
+      <h2 id="register-title">Регистрация заявления</h2>
+      <form id="claim-form" class="form">
+        <label class="field">
+          <span>Номер полиса ОСАГО</span>
+          <input name="policy_number" id="policy_number" required
+                 placeholder="ОСАГО-123456" value="ОСАГО-123456">
+        </label>
+        <label class="field">
+          <span>Регион ДТП</span>
+          <select name="region" id="region">
+            <option>Центральный</option>
+            <option>Северный</option>
+            <option>Южный</option>
+          </select>
+        </label>
+        <label class="field field-wide">
+          <span>Обстоятельства</span>
+          <textarea name="description" id="description" rows="2"
+                    placeholder="Пример: столкновение на перекрёстке, пострадал передний бампер"></textarea>
+        </label>
+        <div class="field-wide form-row">
+          <button type="submit">Зарегистрировать</button>
+          <button type="button" id="reload" class="secondary">Обновить список</button>
+        </div>
+        <p class="hint field-wide">Полис должен соответствовать формату <code>ОСАГО-XXXXXX</code> — иначе АИС ОСАГО отклонит осмотр.</p>
+        <p class="error field-wide" id="form-error" hidden></p>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="claims-title">
+      <h2 id="claims-title">Заявления</h2>
+      <div id="claims-list" class="claims"></div>
+      <p class="hint" id="empty-hint" hidden>Заявлений пока нет — зарегистрируйте первое.</p>
+    </section>
+  </main>
+
+  <footer>Учебный проект · компонент API (FastAPI) · ЛР 3</footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

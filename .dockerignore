@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+data/
+.git/
+.gitignore
+docs_and_diagrams/
+LICENSE
+README.md
+defense_plan_lr3.md
+*.puml
+Отчет*.docx
+.idea/
+.vscode/
