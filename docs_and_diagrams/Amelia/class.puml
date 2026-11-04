@@ -1,0 +1,507 @@
+@startuml
+title ИС ОСАГО, администрирование и RBAC. UML CLASS DIAGRAM — компонент "API (FastAPI)"
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle frame
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+
+
+' =====================================================
+' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
+' =====================================================
+package "Слой API: контроллеры (FastAPI Router)" #E8F4FB {
+
+    class AuthController {
+        - _service: IAuthService
+        + __init__(service: IAuthService) -> None
+        + request_code(phone: str) -> None
+        + verify_code(phone: str, code: str) -> AccessToken
+    }
+
+    class UserController {
+        - _service: IUserService
+        - _access: AccessService
+        + __init__(service: IUserService, access: AccessService) -> None
+        + create_user(actor: User, user: User) -> User
+        + assign_role(actor: User, user_id: UUID, role_id: UUID) -> User
+        + block_user(actor: User, user_id: UUID) -> User
+    }
+
+    class TariffController {
+        - _service: ITariffService
+        - _access: AccessService
+        + __init__(service: ITariffService, access: AccessService) -> None
+        + list_tariffs(actor: User) -> list[Tariff]
+        + update_coefficient(actor: User, coefficient: Coefficient) -> Coefficient
+        + publish_tariff(actor: User, tariff_id: UUID) -> Tariff
+    }
+
+    class AuditController {
+        - _service: AuditService
+        - _access: AccessService
+        + __init__(service: AuditService, access: AccessService) -> None
+        + search_events(actor: User, query: AuditFilter) -> list[AuditEvent]
+    }
+
+    class MaintenanceController {
+        - _service: IMaintenanceService
+        - _access: AccessService
+        + __init__(service: IMaintenanceService, access: AccessService) -> None
+        + list_failed_tasks(actor: User) -> list[TaskItem]
+        + retry_task(actor: User, task_id: UUID) -> TaskItem
+        + request_report(actor: User) -> UUID
+        + delete_document(actor: User, file_id: UUID) -> None
+    }
+}
+
+
+' =====================================================
+' СЛОЙ БИЗНЕС-ЛОГИКИ: СЕРВИСЫ
+' =====================================================
+package "Слой бизнес-логики: сервисы" #E8F4FB {
+
+    interface IAuthService {
+        + request_code(phone: str) -> None
+        + verify_code(phone: str, code: str) -> AccessToken
+    }
+
+    class AuthService {
+        - _users: IUserRepository
+        - _sms: SmsGatewayFacade
+        - _audit: AuditService
+        + __init__(users: IUserRepository, sms: SmsGatewayFacade, audit: AuditService) -> None
+        + request_code(phone: str) -> None
+        + verify_code(phone: str, code: str) -> AccessToken
+        - _generate_code() -> str
+    }
+
+    interface IUserService {
+        + create_user(user: User) -> User
+        + assign_role(user_id: UUID, role_id: UUID) -> User
+        + block_user(user_id: UUID) -> User
+    }
+
+    class UserService {
+        - _repo: IUserRepository
+        - _audit: AuditService
+        + __init__(repo: IUserRepository, audit: AuditService) -> None
+        + create_user(user: User) -> User
+        + assign_role(user_id: UUID, role_id: UUID) -> User
+        + block_user(user_id: UUID) -> User
+    }
+
+    interface ITariffService {
+        + list_tariffs() -> list[Tariff]
+        + update_coefficient(coefficient: Coefficient) -> Coefficient
+        + publish_tariff(tariff_id: UUID) -> Tariff
+    }
+
+    class TariffService {
+        - _repo: ITariffRepository
+        - _audit: AuditService
+        + __init__(repo: ITariffRepository, audit: AuditService) -> None
+        + list_tariffs() -> list[Tariff]
+        + update_coefficient(coefficient: Coefficient) -> Coefficient
+        + publish_tariff(tariff_id: UUID) -> Tariff
+        - _validate(coefficient: Coefficient) -> None
+    }
+
+    interface IMaintenanceService {
+        + list_failed_tasks() -> list[TaskItem]
+        + retry_task(task_id: UUID) -> TaskItem
+        + request_report() -> UUID
+        + delete_document(file_id: UUID) -> None
+    }
+
+    class MaintenanceService {
+        - _tasks: TaskQueueFacade
+        - _queue: IAuditRepository
+        - _files: IFileRepository
+        - _audit: AuditService
+        + __init__(tasks: TaskQueueFacade, queue: IAuditRepository, files: IFileRepository, audit: AuditService) -> None
+        + list_failed_tasks() -> list[TaskItem]
+        + retry_task(task_id: UUID) -> TaskItem
+        + request_report() -> UUID
+        + delete_document(file_id: UUID) -> None
+    }
+
+    class AuditService {
+        - _repo: IAuditRepository
+        + __init__(repo: IAuditRepository) -> None
+        + log(event: AuditEvent) -> None
+        + search(query: AuditFilter) -> list[AuditEvent]
+    }
+
+    class AccessService {
+        - _policy: AccessPolicyStrategy
+        + __init__(policy: AccessPolicyStrategy) -> None
+        + set_policy(policy: AccessPolicyStrategy) -> None
+        + check(user: User, permission: Permission) -> None
+    }
+}
+
+
+' =====================================================
+' ПАТТЕРН STRATEGY: ПОЛИТИКИ ПРОВЕРКИ ДОСТУПА (RBAC)
+' =====================================================
+package "Strategy: политики проверки доступа (RBAC)" #FDF3E3 {
+
+    interface AccessPolicyStrategy {
+        + is_allowed(user: User, permission: Permission) -> bool
+    }
+
+    class RoleBasedPolicy {
+        - _repo: IUserRepository
+        + __init__(repo: IUserRepository) -> None
+        + is_allowed(user: User, permission: Permission) -> bool
+    }
+
+    class PermissionBasedPolicy {
+        - _repo: IUserRepository
+        + __init__(repo: IUserRepository) -> None
+        + is_allowed(user: User, permission: Permission) -> bool
+    }
+
+    class AdminOverridePolicy {
+        - _fallback: AccessPolicyStrategy
+        + __init__(fallback: AccessPolicyStrategy) -> None
+        + is_allowed(user: User, permission: Permission) -> bool
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ
+' =====================================================
+package "Слой интеграции: фасады" #EAF1FA {
+
+    class SmsGatewayFacade {
+        - _http: HTTPClient
+        + __init__(http: HTTPClient) -> None
+        + send_code(phone: str, code: str) -> bool
+    }
+
+    class TaskQueueFacade {
+        - _repo: IAuditRepository
+        + __init__(repo: IAuditRepository) -> None
+        + enqueue(task: TaskItem) -> UUID
+    }
+}
+
+
+' =====================================================
+' СЛОЙ ДАННЫХ: РЕПОЗИТОРИИ
+' =====================================================
+package "Слой данных: репозитории" #EAF1FA {
+
+    interface IUserRepository {
+        + get_user(user_id: UUID) -> User | None
+        + get_by_phone(phone: str) -> User | None
+        + save_user(user: User) -> User
+        + get_role(role_id: UUID) -> Role | None
+        + get_permissions(user_id: UUID) -> set[Permission]
+        + save_code(code: OneTimeCode) -> None
+        + get_code(phone: str) -> OneTimeCode | None
+    }
+
+    class UserRepository {
+        - _session: Session
+        + get_user(user_id: UUID) -> User | None
+        + get_by_phone(phone: str) -> User | None
+        + save_user(user: User) -> User
+        + get_role(role_id: UUID) -> Role | None
+        + get_permissions(user_id: UUID) -> set[Permission]
+        + save_code(code: OneTimeCode) -> None
+        + get_code(phone: str) -> OneTimeCode | None
+    }
+
+    interface ITariffRepository {
+        + list_tariffs() -> list[Tariff]
+        + get_tariff(tariff_id: UUID) -> Tariff | None
+        + save_tariff(tariff: Tariff) -> Tariff
+        + save_coefficient(coefficient: Coefficient) -> Coefficient
+    }
+
+    class TariffRepository {
+        - _session: Session
+        + list_tariffs() -> list[Tariff]
+        + get_tariff(tariff_id: UUID) -> Tariff | None
+        + save_tariff(tariff: Tariff) -> Tariff
+        + save_coefficient(coefficient: Coefficient) -> Coefficient
+    }
+
+    interface IAuditRepository {
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + search_audit(query: AuditFilter) -> list[AuditEvent]
+        + save_task(task: TaskItem) -> UUID
+        + get_task(task_id: UUID) -> TaskItem | None
+        + list_tasks(status: TaskStatus) -> list[TaskItem]
+    }
+
+    class AuditRepository {
+        - _session: Session
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + search_audit(query: AuditFilter) -> list[AuditEvent]
+        + save_task(task: TaskItem) -> UUID
+        + get_task(task_id: UUID) -> TaskItem | None
+        + list_tasks(status: TaskStatus) -> list[TaskItem]
+    }
+
+    interface IFileRepository {
+        + get_file(file_id: UUID) -> bytes | None
+        + delete_file(file_id: UUID) -> None
+    }
+
+    class FileRepository {
+        - _db: Database
+        - _fs: GridFS
+        + get_file(file_id: UUID) -> bytes | None
+        + delete_file(file_id: UUID) -> None
+    }
+}
+
+
+' =====================================================
+' ДОМЕН: СУЩНОСТИ И ПЕРЕЧИСЛЕНИЯ
+' =====================================================
+package "Домен: сущности и перечисления" #F5F5F5 {
+
+    enum RoleCode {
+        ADMIN
+        ACCOUNTANT
+        SECURITY_OFFICER
+        SUPPORT
+        AGENT
+        SALES_MANAGER
+        DISPATCHER
+        EXPERT
+        CLIENT
+    }
+
+    enum Permission {
+        USERS_MANAGE
+        TARIFFS_EDIT
+        AUDIT_READ
+        TASKS_MANAGE
+        DOCUMENTS_DELETE
+    }
+
+    enum UserStatus {
+        ACTIVE
+        BLOCKED
+    }
+
+    enum TaskType {
+        POLICY_REGISTRATION
+        PAYMENT_CHECK
+        REPORT
+    }
+
+    enum TaskStatus {
+        PENDING
+        IN_PROGRESS
+        DONE
+        FAILED
+    }
+
+    class User {
+        - user_id: UUID
+        - full_name: str
+        - phone: str
+        - email: str
+        - status: UserStatus
+        - roles: list[Role]
+        - extra_permissions: set[Permission]
+        + has_role(code: RoleCode) -> bool
+        + block() -> None
+    }
+
+    class Role {
+        - role_id: UUID
+        - code: RoleCode
+        - name: str
+        - permissions: set[Permission]
+    }
+
+    class OneTimeCode {
+        - phone: str
+        - code_hash: str
+        - expires_at: datetime
+        - attempts: int
+        + is_expired(now: datetime) -> bool
+    }
+
+    class AccessToken {
+        - token: str
+        - user_id: UUID
+        - expires_at: datetime
+    }
+
+    class Tariff {
+        - tariff_id: UUID
+        - name: str
+        - base_rate: Decimal
+        - valid_from: date
+        - is_active: bool
+        - coefficients: list[Coefficient]
+        + activate() -> None
+    }
+
+    class Coefficient {
+        - coefficient_id: UUID
+        - code: str
+        - name: str
+        - value: Decimal
+    }
+
+    class AuditEvent {
+        - event_id: UUID
+        - actor: str
+        - action: str
+        - entity_id: UUID
+        - occurred_at: datetime
+    }
+
+    class AuditFilter {
+        - actor: str | None
+        - action: str | None
+        - date_from: datetime | None
+        - date_to: datetime | None
+    }
+
+    class TaskItem {
+        - task_id: UUID
+        - type: TaskType
+        - status: TaskStatus
+        - attempts: int
+        - created_at: datetime
+        + mark_for_retry() -> None
+    }
+}
+
+
+' =====================================================
+' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+AuthService ..|> IAuthService
+UserService ..|> IUserService
+TariffService ..|> ITariffService
+MaintenanceService ..|> IMaintenanceService
+UserRepository ..|> IUserRepository
+TariffRepository ..|> ITariffRepository
+AuditRepository ..|> IAuditRepository
+FileRepository ..|> IFileRepository
+RoleBasedPolicy ..|> AccessPolicyStrategy
+PermissionBasedPolicy ..|> AccessPolicyStrategy
+AdminOverridePolicy ..|> AccessPolicyStrategy
+
+
+' =====================================================
+' СВЯЗИ: ИНЪЕКЦИЯ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' =====================================================
+AuthController ..> IAuthService : "DI"
+UserController ..> IUserService : "DI"
+TariffController ..> ITariffService : "DI"
+AuditController ..> AuditService : "DI"
+MaintenanceController ..> IMaintenanceService : "DI"
+
+UserController ..> AccessService : "DI"
+TariffController ..> AccessService : "DI"
+AuditController ..> AccessService : "DI"
+MaintenanceController ..> AccessService : "DI"
+
+AccessService o--> AccessPolicyStrategy : "aggregation, DI\nподмена в рантайме"
+AdminOverridePolicy o--> AccessPolicyStrategy : "fallback"
+RoleBasedPolicy ..> IUserRepository : "DI"
+PermissionBasedPolicy ..> IUserRepository : "DI"
+
+AuthService ..> IUserRepository : "DI"
+AuthService ..> SmsGatewayFacade : "DI"
+AuthService ..> AuditService : "DI"
+
+UserService ..> IUserRepository : "DI"
+UserService ..> AuditService : "DI"
+
+TariffService ..> ITariffRepository : "DI"
+TariffService ..> AuditService : "DI"
+
+MaintenanceService ..> TaskQueueFacade : "DI"
+MaintenanceService ..> IAuditRepository : "DI"
+MaintenanceService ..> IFileRepository : "DI"
+MaintenanceService ..> AuditService : "DI"
+
+AuditService ..> IAuditRepository : "DI"
+TaskQueueFacade ..> IAuditRepository : "DI"
+
+
+' =====================================================
+' СВЯЗИ: СЕРВИСЫ -> ДОМЕН (создание / использование)
+' =====================================================
+AuthService ..> OneTimeCode : "creates"
+AuthService ..> AccessToken : "creates"
+UserService ..> User : "creates"
+MaintenanceService ..> TaskItem : "enqueues"
+AuthService ..> AuditEvent : "creates"
+UserService ..> AuditEvent : "creates"
+TariffService ..> AuditEvent : "creates"
+MaintenanceService ..> AuditEvent : "creates"
+AccessPolicyStrategy ..> Permission : "uses"
+
+
+' =====================================================
+' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
+' =====================================================
+TaskQueueFacade ..> TaskItem
+UserRepository ..> User
+UserRepository ..> OneTimeCode
+TariffRepository ..> Tariff
+AuditRepository ..> AuditEvent
+AuditRepository ..> TaskItem
+
+
+' =====================================================
+' СВЯЗИ: ВНУТРИ ДОМЕНА
+' =====================================================
+User "0..*" o-- "1..*" Role
+Tariff "1" *-- "1..*" Coefficient
+User ..> UserStatus
+Role ..> RoleCode
+Role ..> Permission
+TaskItem ..> TaskType
+TaskItem ..> TaskStatus
+AuditFilter ..> AuditEvent : "filters"
+
+
+' =====================================================
+' УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ)
+' =====================================================
+AuthController -[hidden]right- UserController
+UserController -[hidden]right- TariffController
+TariffController -[hidden]right- AuditController
+AuditController -[hidden]right- MaintenanceController
+AccessService -[hidden]down- AccessPolicyStrategy
+RoleBasedPolicy -[hidden]right- PermissionBasedPolicy
+PermissionBasedPolicy -[hidden]right- AdminOverridePolicy
+SmsGatewayFacade -[hidden]right- TaskQueueFacade
+UserRepository -[hidden]right- TariffRepository
+TariffRepository -[hidden]right- AuditRepository
+AuditRepository -[hidden]right- FileRepository
+
+@enduml
