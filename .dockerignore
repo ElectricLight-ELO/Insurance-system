@@ -8,6 +8,6 @@ LICENSE
 README.md
 defense_plan_lr3.md
 *.puml
-*.docx
+Отчет*.docx
 .idea/
 .vscode/
