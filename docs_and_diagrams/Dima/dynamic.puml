@@ -1,0 +1,84 @@
+@startuml "IS OSAGO - Dynamic Diagram"
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Динамическая диаграмма — Регистрация заявления о ДТП и формирование протокола осмотра
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
+
+
+Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера\nи аварийного эксперта,\nэлектронная подпись клиента")
+
+System_Boundary(api, "API (FastAPI)") {
+    Component(c_acc, "AccidentController", "FastAPI Router", "Приём REST-запросов:\nзаявления о ДТП,\nназначение эксперта", $tags="api")
+    Component(c_insp, "InspectionController", "FastAPI Router", "Приём REST-запросов:\nрезультаты осмотра, фото,\nэлектронная подпись", $tags="api")
+    Component(s_acc, "AccidentService", "Python Service", "Бизнес-логика заявления,\nназначение эксперта,\nсобытия аудита", $tags="service")
+    Component(s_insp, "InspectionService", "Python Service", "Бизнес-логика осмотра,\nприём фото и подписи,\nпостановка задач", $tags="service")
+    Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция вызова:\nпроверка полиса\nчерез АИС ОСАГО", $tags="integration")
+    Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка задач\nв очередь outbox", $tags="integration")
+    Component(r_acc, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям,\naудиту и очереди\nв PostgreSQL", $tags="data")
+    Component(r_file, "FileRepository", "PyMongo", "Доступ к фото, подписям\nи PDF-документам\nв MongoDB", $tags="data")
+}
+
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления, события аудита,\nочередь задач (outbox)")
+ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото осмотра, подписи,\nPDF-протоколы")
+
+Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nгенерация PDF-протокола,\nотправка клиенту")
+
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договоре", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Доставка документов\nи уведомлений", $tags="внешняя_система")
+
+
+' === СЦЕНАРИЙ: ХРОНОЛОГИЯ ВЫЗОВОВ (СКОЗНОЙ ПРОЦЕСС) ===
+
+Rel(web_app, c_acc, "1. Регистрация заявления о ДТП — register_claim", "REST/HTTPS, JSON")
+Rel(c_acc, s_acc, "2. Вызов register_claim() — создание заявления", "Python Function Call")
+Rel(s_acc, f_ais, "3. Вызов check_policy() — проверка полиса", "Python Function Call")
+Rel(f_ais, ais_osago, "4. Запрос сведений о полисе ОСАГО", "HTTPS, JSON, mTLS")
+Rel(s_acc, r_acc, "5. assign_expert() — выбор эксперта (AssignmentStrategy) и сохранение", "Python Function Call")
+Rel(r_acc, db_audit, "6. Запись заявления, статуса ASSIGNED и события аудита", "SQL / TCP")
+
+Rel(web_app, c_insp, "7. Приём результатов осмотра — submit_results", "REST/HTTPS, JSON")
+Rel(c_insp, s_insp, "8. Вызов submit_results() — обработка результатов осмотра", "Python Function Call")
+Rel(s_insp, r_file, "9. Вызов upload_photos() и accept_signature() — фото и подпись клиента", "Python Function Call")
+Rel(r_file, db_files, "10. Сохранение фотографий осмотра и подписи (GridFS)", "MongoDB / TCP")
+
+Rel(s_insp, f_task, "11. Вызов enqueue() — постановка задачи PDF_PROTOCOL", "Python Function Call")
+Rel(f_task, r_acc, "12. Вызов save_task() — запись задачи в очередь outbox", "Python Function Call")
+
+Rel(worker, db_audit, "13. Выборка задач из очереди и обновление статусов", "SQL / TCP")
+Rel(worker, db_files, "14. Чтение фотографий, генерация и сохранение PDF-протокола", "MongoDB / TCP")
+Rel(worker, email_sys, "15. Отправка протокола осмотра клиенту", "SMTP / HTTPS")
+
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+web_app -[hidden]down- c_acc
+
+c_acc -[hidden]right- c_insp
+c_acc -[hidden]down- s_acc
+c_insp -[hidden]down- s_insp
+
+s_acc -[hidden]right- s_insp
+s_acc -[hidden]down- f_ais
+s_insp -[hidden]down- f_task
+
+f_ais -[hidden]right- f_task
+f_ais -[hidden]down- r_acc
+f_task -[hidden]down- r_file
+
+r_acc -[hidden]right- r_file
+r_acc -[hidden]down- db_audit
+r_file -[hidden]down- db_files
+
+db_audit -[hidden]right- db_files
+db_audit -[hidden]down- worker
+worker -[hidden]right- email_sys
+db_files -[hidden]down- ais_osago
+
+
+SHOW_LEGEND()
+
+@enduml

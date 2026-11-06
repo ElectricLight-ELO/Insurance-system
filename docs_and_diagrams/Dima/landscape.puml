@@ -1,0 +1,76 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title ИС ОСАГО, фиксация ДТП. SYSTEM LANDSCAPE (L0) — модуль аварийного эксперта
+
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
+AddSystemTag("мой_модуль", $bgColor="#2E86C1", $borderColor="#1B6E9C", $fontColor="#FFFFFF", $legendText="Целевой модуль (контур фиксации ДТП)")
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000", $legendText="Асинхронное взаимодействие")
+
+
+' === УЧАСТНИКИ (РОЛИ МОДУЛЯ) ===
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="персона_синяя")
+Person(expert, "Аварийный эксперт", "Выезжает на место ДТП,\nпроводит осмотр, загружает фото", $tags="персона_синяя")
+Person(client, "Клиент", "Участник ДТП: подписывает\nэлектронный протокол осмотра", $tags="персона_синяя")
+
+
+' === КОРПОРАТИВНАЯ ГРАНИЦА (ИТ-ГРАНИЦА ПРЕДПРИЯТИЯ) ===
+Enterprise_Boundary(insurance_company, "Корпоративная ИТ-инфраструктура страховой компании") {
+
+    System(fixation, "ИС ОСАГО: фиксация ДТП и осмотр", "Регистрация заявлений, назначение эксперта,\nприём фото и подписи, выдача PDF-протокола", $tags="мой_модуль")
+
+    System(iam, "Служба авторизации (IAM)", "Аутентификация сотрудников, RBAC,\nвыпуск и проверка токенов доступа")
+
+    System(policy, "Подсистема оформления полисов", "Расчёт премии, договоры,\nплатежи и комиссия (КВ)")
+}
+
+
+' === ВНЕШНИЕ СИСТЕМЫ (ЗА ГРАНИЦЕЙ ПРЕДПРИЯТИЯ) ===
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Отраслевая система: проверка полиса,\nКБМ, регистрация договоров", $tags="внешняя_система")
+System_Ext(payment_sys, "Платежная система", "Внешняя финансовая система:\nплатёжные сессии, сверки", $tags="внешняя_система")
+System_Ext(sms_sys, "SMS-шлюз", "Доставка одноразовых\nкодов авторизации", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Рассылка протоколов, полисов,\nчеков и уведомлений", $tags="внешняя_система")
+
+
+' === СВЯЗИ: ПОЛЬЗОВАТЕЛИ -> ЦЕЛЕВОЙ МОДУЛЬ ===
+Rel_D(dispatcher, fixation, "Регистрирует заявление о ДТП,\nназначает эксперта", "HTTPS")
+Rel_D(expert, fixation, "Загружает фото и результаты\nосмотра", "HTTPS")
+Rel_D(client, fixation, "Подписывает протокол\nосмотра", "HTTPS")
+
+
+' === СВЯЗИ: МОДУЛЬ -> СМЕЖНЫЕ КОРПОРАТИВНЫЕ СИСТЕМЫ ===
+Rel_R(fixation, iam, "Проверка учётных данных, ролей (RBAC)\nи токенов сессии", "HTTPS, JSON, OAuth2")
+Rel_R(policy, fixation, "Сведения о договоре ОСАГО\nпо номеру полиса", "HTTPS, JSON")
+
+
+' === СВЯЗИ: КОРПОРАТИВНЫЕ СИСТЕМЫ -> ВНЕШНИЕ СИСТЕМЫ ===
+Rel_R(iam, sms_sys, "Отправка одноразового кода\nдля авторизации", "HTTPS, JSON")
+Rel_R(policy, payment_sys, "Создание платёжной сессии,\nсверка поступлений", "HTTPS, JSON")
+
+
+' === СВЯЗИ: ЦЕЛЕВОЙ МОДУЛЬ -> ВНЕШНИЕ СИСТЕМЫ ===
+Rel_D(fixation, ais_osago, "Проверка наличия полиса ОСАГО\nпри регистрации заявления", "HTTPS, JSON, mTLS")
+Rel_D(fixation, email_sys, "Отправка протокола осмотра\nи уведомлений", "SMTP / STARTTLS", $tags="пунктир")
+
+Rel_U(email_sys, client, "Доставка протокола осмотра", "E-mail", $tags="пунктир")
+
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+dispatcher -[hidden]right- expert
+expert -[hidden]right- client
+
+fixation -[hidden]right- iam
+iam -[hidden]right- policy
+
+ais_osago -[hidden]right- payment_sys
+payment_sys -[hidden]right- sms_sys
+sms_sys -[hidden]right- email_sys
+
+insurance_company -[hidden]down- ais_osago
+
+
+SHOW_LEGEND()
+
+@enduml
