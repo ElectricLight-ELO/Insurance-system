@@ -1,0 +1,75 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title ИС ОСАГО, фин. контроль и маржа. SYSTEM LANDSCAPE (L0) — модуль бухгалтерии и финансового контроля
+
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
+AddSystemTag("мой_модуль", $bgColor="#2E86C1", $borderColor="#1B6E9C", $fontColor="#FFFFFF", $legendText="Целевой модуль (финансовый контроль и маржа)")
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000", $legendText="Асинхронное взаимодействие")
+
+
+' === УЧАСТНИКИ (РОЛИ МОДУЛЯ) ===
+Person(accountant, "Бухгалтер", "Ведет финансовый учет, контролирует\nмаржинальность, проверяет отчеты КВ", $tags="персона_синяя")
+Person(auditor, "Финансовый аудитор", "Анализирует финансовые потоки,\nпроверяет результаты сверки платежей", $tags="персона_синяя")
+Person(manager, "Руководитель отдела", "Контролирует общую прибыльность\nпортфеля и агентские выплаты", $tags="персона_синяя")
+
+
+' === КОРПОРАТИВНАЯ ГРАНИЦА (ИТ-ГРАНИЦА ПРЕДПРИЯТИЯ) ===
+Enterprise_Boundary(insurance_company, "Корпоративная ИТ-инфраструктура страховой компании") {
+
+    System(fixation, "ИС ОСАГО: Фин. контроль и маржа", "Расчет маржинальности периода, выплата КВ,\nавтоматическая сверка транзакций, аудит", $tags="мой_модуль")
+
+    System(iam, "Служба авторизации (IAM)", "Аутентификация сотрудников, RBAC,\nвыпуск и проверка токенов доступа")
+
+    System(policy, "Подсистема оформления полисов", "Договоры ОСАГО, страховые премии\nи данные о продажах", $tags="мой_модуль")
+}
+
+
+' === ВНЕШНИЕ СИСТЕМЫ (ЗА ГРАНИЦЕЙ ПРЕДПРИЯТИЯ) ===
+System_Ext(bank_system, "Банк / Платежный эквайринг", "Внешняя финансовая система:\nпроведение оплат, выписки, сверка", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Отраслевая система: проверка договоров,\nсведения о полисах", $tags="внешняя_система")
+System_Ext(sms_sys, "SMS-шлюз", "Доставка одноразовых\nкодов авторизации", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Рассылка финансовых отчетов\nи уведомлений бухгалтеру", $tags="внешняя_система")
+
+
+' === СВЯЗИ: ПОЛЬЗОВАТЕЛИ -> ЦЕЛЕВОЙ МОДУЛЬ ===
+Rel_D(accountant, fixation, "Запускает расчет маржи, КВ,\nконтролирует сверку оплат", "HTTPS")
+Rel_D(auditor, fixation, "Просматривает финансовые логи\nи отчеты аудита", "HTTPS")
+Rel_D(manager, fixation, "Изучает сводные показатели\nприбыльности портфеля", "HTTPS")
+
+
+' === СВЯЗИ: МОДУЛЬ -> СМЕЖНЫЕ КОРПОРАТИВНЫЕ СИСТЕМЫ ===
+Rel_R(fixation, iam, "Проверка учётных данных, ролей (RBAC)\nи токенов сессии", "HTTPS, JSON, OAuth2")
+Rel_R(policy, fixation, "Передача данных о проданных\nполисах для расчета маржи", "HTTPS, JSON")
+
+
+' === СВЯЗИ: КОРПОРАТИВНЫЕ СИСТЕМЫ -> ВНЕШНИЕ СИСТЕМЫ ===
+Rel_R(iam, sms_sys, "Отправка одноразового кода\nдля авторизации", "HTTPS, JSON")
+Rel_R(fixation, bank_system, "Запрос статусов платежей,\nавтоматическая сверка оплат", "HTTPS, JSON", $tags="пунктир")
+
+
+' === СВЯЗИ: ЦЕЛЕВОЙ МОДУЛЬ -> ВНЕШНИЕ СИСТЕМЫ ===
+Rel_D(fixation, ais_osago, "Сверка данных по договорам\nпри финансовом аудите", "HTTPS, JSON, mTLS")
+Rel_D(fixation, email_sys, "Отправка закрывающих отчетов\nи уведомлений бухгалтеру", "SMTP / STARTTLS", $tags="пунктир")
+
+Rel_U(email_sys, accountant, "Доставка отчетов на e-mail", "E-mail", $tags="пунктир")
+
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+accountant -[hidden]right- auditor
+auditor -[hidden]right- manager
+
+fixation -[hidden]right- iam
+iam -[hidden]right- policy
+
+bank_system -[hidden]right- ais_osago
+ais_osago -[hidden]right- sms_sys
+sms_sys -[hidden]right- email_sys
+
+insurance_company -[hidden]down- bank_system
+
+SHOW_LEGEND()
+
+@enduml
