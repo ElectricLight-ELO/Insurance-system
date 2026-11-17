@@ -1,0 +1,256 @@
+@startuml
+title ИС ОСАГО. UML CLASS DIAGRAM — контейнер "Web App (React SPA)" (итоговая, на основе L3)
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam packageStyle frame
+hide stereotype
+skinparam class {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam interface {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam enum {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam package {
+    BorderColor #B8860B
+}
+
+package "Маршруты" #FFFDF2 {
+    class AppRouter <<React Router>> {
+        - routes: Route[]
+        + canActivate(route: string, role: Role) -> boolean
+        + redirectToLogin() -> void
+    }
+}
+
+package "Страницы (React Page)" #FFFDF2 {
+    class CalculatorPage <<React Page>> {
+        - form: CalcForm
+        + render() -> JSX.Element
+    }
+    class CheckoutPage <<React Page>> {
+        - policy: PolicyDraft
+        + render() -> JSX.Element
+    }
+    class CabinetPage <<React Page>> {
+        - policies: Policy[]
+        + render() -> JSX.Element
+        + downloadPolicy(id: string) -> void
+    }
+    class AgentWorkplace <<React Page>> {
+        - clients: Client[]
+        + render() -> JSX.Element
+    }
+    class ManagerWorkplace <<React Page>> {
+        - reports: Report[]
+        + render() -> JSX.Element
+    }
+    class AccidentPage <<React Page>> {
+        - step: number
+        + render() -> JSX.Element
+    }
+    class DispatcherPage <<React Page>> {
+        - claims: Claim[]
+        + render() -> JSX.Element
+        + assignExpert(claimId: string) -> void
+    }
+    class ExpertDashboard <<React Page>> {
+        - cases: Case[]
+        + render() -> JSX.Element
+    }
+    class InspectionPage <<React Page>> {
+        - result: InspectionResult
+        + render() -> JSX.Element
+    }
+}
+
+package "Логика и UI" #FFFDF2 {
+    enum Role {
+        GUEST
+        CLIENT
+        AGENT
+        MANAGER
+        DISPATCHER
+        EXPERT
+    }
+    class AuthLogic <<React Context>> {
+        - token: string | null
+        - role: Role | null
+        + login(phone: string, code: string) -> Promise<void>
+        + logout() -> void
+        + getToken() -> string | null
+        + getRole() -> Role | null
+    }
+    class PolicyLogic <<React Hooks>> {
+        + calculate(data: PolicyData) -> Promise<Premium>
+        + issue(draft: PolicyDraft) -> Promise<Policy>
+        + pay(policyId: string) -> Promise<void>
+        + loadPolicies() -> Promise<Policy[]>
+        + submitSales(report: AgentSales) -> Promise<void>
+        + loadSalesReport(period: Period) -> Promise<SalesReport>
+    }
+    class FormWizard <<React Component>> {
+        - step: number
+        + next() -> void
+        + back() -> void
+        + validateStep() -> boolean
+    }
+    class AccidentLogic <<React Hooks>> {
+        - draft: ClaimDraft
+        + validate(draft: ClaimDraft) -> string[]
+        + submit() -> Promise<Claim>
+    }
+    class PhotoUploader <<React Component>> {
+        - photos: File[]
+        + add(file: File) -> boolean
+        + checkFormat(file: File) -> boolean
+        + remove(index: number) -> void
+    }
+    class ExpertCasesLogic <<React Hooks>> {
+        - filter: CaseFilter
+        + loadCases() -> Promise<Case[]>
+        + changeStatus(claimId: string, status: AccidentStatus) -> Promise<void>
+    }
+    class InspectionLogic <<React Hooks>> {
+        - _strategy: DamageAssessmentStrategy
+        - photos: File[]
+        + setStrategy(strategy: DamageAssessmentStrategy) -> void
+        + classifyDamage(data: DamageData) -> DamageAssessment
+        + toRequest(a: DamageAssessment, notes: string) -> InspectionCreateRequest
+        + submit(claimId: string, request: InspectionCreateRequest) -> Promise<void>
+    }
+    class SignaturePad <<React Component>> {
+        + draw(x: number, y: number) -> void
+        + clear() -> void
+        + toDataUrl() -> string
+    }
+}
+
+package "Оценка ущерба (прототип Никиты, код на Python)" #FFFDF2 {
+    enum DamageCategory {
+        MINOR
+        MEDIUM
+        TOTAL_LOSS
+    }
+    class DamageData {
+        + vehicle_age: int
+        + repair_cost: Decimal
+        + market_value: Decimal
+        + photos_count: int
+        + has_signature: bool
+    }
+    class DamageAssessment {
+        + category: DamageCategory
+        + requires_expert: bool
+        + requires_additional_photos: bool
+    }
+    interface DamageAssessmentStrategy {
+        + classify(data: DamageData) -> DamageAssessment
+    }
+    class MinorDamageStrategy {
+        + classify(data: DamageData) -> DamageAssessment
+    }
+    class MediumDamageStrategy {
+        + classify(data: DamageData) -> DamageAssessment
+    }
+    class TotalLossStrategy {
+        + classify(data: DamageData) -> DamageAssessment
+    }
+}
+
+package "API-клиенты" #FFFDF2 {
+    class AuthApiClient <<TypeScript>> {
+        - _http: HttpClient
+        + requestCode(phone: string) -> Promise<void>
+        + verifyCode(phone: string, code: string) -> Promise<TokenResponse>
+    }
+    class PolicyApiClient <<TypeScript>> {
+        - _http: HttpClient
+        + calculate(data: PolicyData) -> Promise<Premium>
+        + issue(draft: PolicyDraft) -> Promise<Policy>
+        + pay(policyId: string) -> Promise<PaymentSessionResponse>
+        + downloadPolicy(policyNumber: string) -> Promise<Blob>
+        + submitSales(body: AgentSalesDTO) -> Promise<void>
+        + salesReport(period: Period) -> Promise<SalesReportDTO>
+    }
+    class AccidentApiClient <<TypeScript>> {
+        - _http: HttpClient
+        + createClaim(body: ClaimCreateRequest) -> Promise<ClaimResponse>
+        + listClaims() -> Promise<ClaimResponse[]>
+        + assign(claimId: string) -> Promise<ClaimResponse>
+        + changeStatus(claimId: string, status: AccidentStatus) -> Promise<ClaimResponse>
+    }
+    class InspectionApiClient <<TypeScript>> {
+        - _http: HttpClient
+        + submitResults(claimId: string, body: InspectionCreateRequest) -> Promise<InspectionResponse>
+        + uploadPhotos(claimId: string, files: File[]) -> Promise<PhotosResponse>
+        + sign(claimId: string, body: SignatureRequest) -> Promise<SignatureResponse>
+        + downloadProtocol(claimId: string) -> Promise<Blob>
+    }
+}
+
+package "HTTP" #FFFDF2 {
+    class HttpClient <<axios>> {
+        - _baseUrl: string
+        - _auth: AuthLogic
+        + request<T>(method: string, url: string, body?: object) -> Promise<T>
+        + attachToken() -> void
+        + handleError(status: number) -> void
+        + retry(request: Request, attempts: number) -> Promise<Response>
+    }
+}
+
+' --- Зависимости (из связей компонентов L3) ---
+AppRouter ..> CalculatorPage
+AppRouter ..> CheckoutPage
+AppRouter ..> CabinetPage
+AppRouter ..> AgentWorkplace
+AppRouter ..> ManagerWorkplace
+AppRouter ..> AccidentPage
+AppRouter ..> DispatcherPage
+AppRouter ..> ExpertDashboard
+AppRouter ..> InspectionPage
+AppRouter ..> AuthLogic : "RBAC"
+CalculatorPage ..> PolicyLogic
+CheckoutPage ..> PolicyLogic
+CabinetPage ..> PolicyLogic
+AgentWorkplace ..> PolicyLogic
+ManagerWorkplace ..> PolicyLogic
+AccidentPage ..> AccidentLogic
+AccidentPage ..> FormWizard
+DispatcherPage ..> AccidentLogic
+ExpertDashboard ..> ExpertCasesLogic
+InspectionPage ..> InspectionLogic
+InspectionPage ..> PhotoUploader
+InspectionPage ..> SignaturePad
+AuthLogic ..> AuthApiClient
+PolicyLogic ..> PolicyApiClient
+AccidentLogic ..> AccidentApiClient
+ExpertCasesLogic ..> AccidentApiClient
+InspectionLogic ..> InspectionApiClient
+AuthApiClient ..> HttpClient
+PolicyApiClient ..> HttpClient
+AccidentApiClient ..> HttpClient
+InspectionApiClient ..> HttpClient
+HttpClient ..> AuthLogic : "RBAC"
+
+' --- Реализации и прочие связи ---
+DamageAssessmentStrategy <|.. MinorDamageStrategy
+DamageAssessmentStrategy <|.. MediumDamageStrategy
+DamageAssessmentStrategy <|.. TotalLossStrategy
+DamageAssessmentStrategy ..> DamageAssessment
+DamageAssessmentStrategy ..> DamageData
+DamageAssessment ..> DamageCategory
+InspectionLogic ..> DamageAssessment : "оценка ущерба"
+
+@enduml

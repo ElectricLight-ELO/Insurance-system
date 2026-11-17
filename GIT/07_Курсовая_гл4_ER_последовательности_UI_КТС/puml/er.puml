@@ -1,0 +1,142 @@
+@startuml
+skinparam dpi 170
+skinparam linetype ortho
+skinparam defaultFontName Times New Roman
+skinparam defaultFontSize 12
+skinparam nodesep 40
+skinparam ranksep 60
+hide circle
+skinparam packageStyle frame
+
+package "DB_USERS (PostgreSQL)" #F4FAFE {
+  entity "roles" as roles {
+    * role_id : smallint <<PK>>
+    --
+    * code : varchar(32) <<UQ>>
+    * title : varchar(64)
+  }
+  entity "users" as users {
+    * user_id : uuid <<PK>>
+    --
+    * full_name : varchar(128)
+    * phone : varchar(16) <<UQ>>
+    * role_id : smallint <<FK>>
+    * active : boolean
+  }
+  entity "policies" as policies {
+    * policy_id : uuid <<PK>>
+    --
+    * policy_number : varchar(20) <<UQ>>
+    * holder_id : uuid <<FK>>
+    * status : varchar(16)
+    * premium : numeric(12,2)
+    * expires_at : timestamptz
+  }
+}
+
+package "DB_TARIFS (PostgreSQL)" #FFFBEA {
+  entity "tariffs" as tariffs {
+    * tariff_id : uuid <<PK>>
+    --
+    * region : varchar(64) <<IDX>>
+    * base_rate : numeric(10,2)
+    * coefficient : numeric(6,3)
+  }
+  entity "margin_reports" as margin {
+    * report_id : uuid <<PK>>
+    --
+    * period_start : timestamptz
+    * period_end : timestamptz
+    * revenue : numeric(14,2)
+    * commission : numeric(14,2)
+    * margin : numeric(14,2)
+  }
+}
+
+package "DB_AUDIT (PostgreSQL)" #EAF7EA {
+  entity "claims" as claims {
+    * claim_id : varchar(36) <<PK>>
+    --
+    * number : varchar(64)
+    * policy_number : varchar(64) <<IDX>>
+    * region : varchar(128)
+    description : text
+    * status : varchar(32)
+    expert_id : varchar(36)
+    * created_at : timestamptz
+  }
+  entity "inspections" as insp {
+    * inspection_id : varchar(36) <<PK>>
+    --
+    * claim_id : varchar(36) <<IDX>>
+    * expert_id : varchar(36)
+    * damage_found : boolean
+    notes : text
+    * completed_at : timestamptz
+  }
+  entity "tasks (outbox)" as outbox {
+    * task_id : varchar(36) <<PK>>
+    --
+    * type : varchar(64)
+    * claim_id : varchar(36)
+    * status : varchar(16) pending|done|failed
+    * created_at : timestamptz
+    processed_at : timestamptz
+  }
+  entity "audit_events" as audit {
+    * event_id : varchar(36) <<PK>>
+    --
+    * actor : varchar(64)
+    * action : varchar(64)
+    * entity_id : varchar(36)
+    * occurred_at : timestamptz
+  }
+  entity "experts (временно)" as experts {
+    * expert_id : varchar(36) <<PK>>
+    --
+    * name : varchar(255)
+    * region : varchar(128)
+  }
+  entity "transactions (план)" as trx {
+    * transaction_id : uuid <<PK>>
+    --
+    * policy_number : varchar(20) <<IDX>>
+    * amount : numeric(12,2)
+    * status : varchar(16)
+    * created_at : timestamptz
+  }
+}
+
+package "DB_FILES (MongoDB)" #FDEDEC {
+  entity "photos" as photos {
+    * _id : ObjectId <<PK>>
+    --
+    * claim_id : string <<IDX>>
+    * content : binData
+    meta : object
+  }
+  entity "signatures" as sigs {
+    * _id : ObjectId <<PK>>
+    --
+    * claim_id : string <<IDX>>
+    * content : binData
+  }
+  entity "protocols" as prot {
+    * _id = claim_id : string <<PK>>
+    --
+    * content : binData (PDF)
+  }
+}
+
+roles ||--o{ users
+users ||--o{ policies : holder
+claims ||--o{ insp
+claims ||--o{ outbox
+experts |o..o{ claims : expert_id
+users ||..o| experts : по L2 эксперт = пользователь
+policies ||..o{ trx : policy_number
+policies ||..o{ claims : policy_number
+claims ||..o{ photos : claim_id
+claims ||..o{ sigs : claim_id
+claims ||..o| prot : claim_id
+@enduml
