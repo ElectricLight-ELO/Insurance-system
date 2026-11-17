@@ -1,0 +1,30 @@
+' =====================================================================
+'  ИС ОСАГО — единый стиль диаграмм кода (L4, UML Class) — тимлид
+'  Все классы — эскизы, поэтому единый жёлтый цвет.
+' =====================================================================
+skinparam defaultFontName "Liberation Sans"
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam packageStyle frame
+hide stereotype
+skinparam class {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam interface {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam enum {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam package {
+    BackgroundColor #FFFFFF
+    BorderColor #B8860B
+}
