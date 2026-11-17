@@ -1,0 +1,55 @@
+@startuml
+skinparam defaultFontName "Liberation Sans"
+skinparam dpi 140
+skinparam shadowing false
+skinparam node {
+  BackgroundColor #EAF4FB
+  BorderColor #2E86C1
+}
+skinparam artifact {
+  BackgroundColor #6CC2F5
+  BorderColor #2E86C1
+}
+skinparam database {
+  BackgroundColor #A9D8F5
+  BorderColor #2E86C1
+}
+skinparam ArrowColor #1B2A4A
+title ИС ОСАГО, Backoffice. DEPLOYMENT DIAGRAM — локальный сегмент модуля администрирования и аудита
+
+node "Рабочие места сотрудников бэк-офиса\n(браузер, корпоративная сеть)" as ws
+node "VPN-шлюз / корпоративный МЭ\nдоступ только для сотрудников" as vpn
+node "Служба авторизации (IAM)\nкорпоративный сервер, :8443" as iam
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as host {
+  node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
+    artifact "Nginx Reverse Proxy\n:443, TLS 1.2+\nвход в Backoffice только\nиз корпоративной сети (allowlist)" as nginx
+    artifact "Backoffice\nстатический бандл React SPA\n(отдаётся Nginx)" as bo
+    artifact "API (FastAPI)\nреплика 1\n:8000" as api1
+    artifact "API (FastAPI)\nреплика 2\n:8000" as api2
+    artifact "Worker (Celery)\nинстанс 1" as w1
+    database "DB_USERS\nPostgreSQL :5432, TLS" as dbu
+    database "DB_TARIFS\nPostgreSQL :5432, TLS" as dbt
+    database "DB_AUDIT\nPostgreSQL, Master\n:5432, TLS" as dba
+    database "DB_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as dbar
+  }
+}
+cloud "Интернет" as inet {
+  node "E-mail система\nвнешний почтовый релей" as mail
+  node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+}
+ws --> vpn : "HTTPS, TLS 1.2+\n:443/TCP"
+vpn --> nginx : "HTTPS :443/TCP\n(IP allowlist)"
+nginx --> bo : "отдача статики\n:443/TCP"
+nginx --> api1 : "reverse proxy /api/admin\n:8000/TCP, round-robin\n+ health check"
+nginx --> api2 : "reverse proxy /api/admin\n:8000/TCP, round-robin\n+ health check"
+api1 --> iam : "OAuth2 introspection\n:8443/TCP, TLS"
+api2 --> iam : "OAuth2 introspection\n:8443/TCP, TLS"
+api1 --> dbu : "SQL/TCP, TLS :5432"
+api1 --> dbt : "SQL/TCP, TLS :5432"
+api1 --> dba : "SQL/TCP, TLS :5432\nаудит, outbox"
+api2 --> dba : "SQL/TCP, TLS :5432"
+dba --> dbar : "streaming replication\n:5432/TCP, TLS"
+w1 --> dba : "опрос outbox\n:5432/TCP, TLS"
+w1 --> ais : "HTTPS, mTLS\n:443/TCP"
+w1 --> mail : "SMTP STARTTLS\n:587/TCP"
+@enduml

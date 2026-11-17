@@ -1,0 +1,41 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+actor "Клиент" as C
+actor "Страховой\nагент" as AG
+actor "Менеджер\nотдела продаж" as M
+rectangle "Страховая компания: продажа и оформление полисов (как есть)" {
+  usecase "Узнать стоимость\nполиса через агента" as U1 #FAD7B5
+  usecase "Предоставить документы\nклиента и ТС" as U2
+  usecase "Оплатить полис\n(касса, перевод)" as U6
+  usecase "Подтвердить оплату\nпо выписке" as U7 #FAD7B5
+  usecase "Оформить бумажный\nдоговор" as U5
+  usecase "Рассчитать премию\nвручную (Excel)" as U3 #FAD7B5
+  usecase "Запросить КБМ, проверить\nТС и водителей" as U4 #FAD7B5
+  usecase "Внести договор в АИС\nОСАГО вручную" as U8 #FAD7B5
+  usecase "Выдать бумажный\nполис" as U9
+  usecase "Собрать отчёт\nпо продажам вручную" as U10 #FAD7B5
+  usecase "Утвердить\nсложный случай" as U11
+}
+actor "Банк" as BANK
+actor "АИС ОСАГО\n(веб-кабинет)" as AIS
+C -- U1
+C -- U2
+C -- U6
+AG -- U7
+AG -- U5
+AG -- U8
+AG -- U9
+M -- U10
+M -- U11
+U6 -- BANK
+U7 -- BANK
+U4 -- AIS
+U8 -- AIS
+U5 ..> U3 : <<include>>
+U3 ..> U4 : <<include>>
+@enduml

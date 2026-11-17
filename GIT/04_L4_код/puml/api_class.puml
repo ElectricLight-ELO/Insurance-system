@@ -1,0 +1,436 @@
+@startuml
+title ИС ОСАГО. UML CLASS DIAGRAM — контейнер "API (FastAPI)" (итоговая, на основе L3)
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 55
+skinparam packageStyle frame
+hide stereotype
+skinparam class {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam interface {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam enum {
+    BackgroundColor #FFFBEA
+    BorderColor #D9A400
+    HeaderBackgroundColor #FFD966
+}
+skinparam package {
+    BorderColor #B8860B
+}
+
+package "Контроллеры (FastAPI Router)" #FFFDF2 {
+    class AuthController <<Controller>> {
+        + request_code(phone: str) -> None
+        + verify_code(phone: str, code: str) -> TokenResponse
+    }
+    class AdminController <<Controller>> {
+        + list_users() -> list[UserDTO]
+        + create_user(user: UserDTO) -> UserDTO
+        + assign_role(user_id: UUID, role: str) -> UserDTO
+        + update_tariff(tariff: TariffDTO) -> TariffDTO
+        + get_audit() -> list[AuditEventDTO]
+        + restart_task(task_id: UUID) -> None
+        + register_contract(policy_number: str) -> None
+        + ask_client(claim_id: UUID, text: str) -> None
+        + find_policies(query: str) -> list[PolicyDTO]
+        + get_payments() -> list[PaymentDTO]
+        + get_margin() -> list[MarginReportDTO]
+        + request_invoice(payload: InvoiceRequest) -> None
+    }
+    class InspectionController <<Controller>> {
+        + submit_results(claim_id: UUID, payload: InspectionCreateRequest) -> InspectionResponse
+        + upload_photos(claim_id: UUID, files: list[UploadFile]) -> PhotosResponse
+        + accept_signature(claim_id: UUID, payload: SignatureRequest) -> SignatureResponse
+        + get_protocol(claim_id: UUID) -> Response
+    }
+    class AccidentController <<Controller>> {
+        + register_claim(payload: ClaimCreateRequest) -> ClaimResponse
+        + list_claims() -> list[ClaimResponse]
+        + get_claim(claim_id: UUID) -> ClaimResponse
+        + assign_expert(claim_id: UUID) -> ClaimResponse
+        + change_status(claim_id: UUID, payload: StatusChangeRequest) -> ClaimResponse
+    }
+    class PolicyController <<Controller>> {
+        + calculate_premium(payload: PremiumRequest) -> PremiumResponse
+        + issue_policy(payload: PolicyCreateRequest) -> PolicyDTO
+        + list_my_policies() -> list[PolicyDTO]
+        + download_policy(policy_number: str) -> Response
+        + submit_agent_sales(payload: AgentSalesDTO) -> None
+        + get_sales_report(start: date, end: date) -> SalesReportDTO
+    }
+    class PaymentController <<Controller>> {
+        + create_session(payload: PaymentSessionRequest) -> PaymentSessionResponse
+        + handle_webhook(payload: PaymentWebhook) -> None
+    }
+}
+
+package "Слой бизнес-логики: сервисы" #FFFDF2 {
+    interface IAdminService {
+        + list_users() -> list[User]
+        + create_user(user: User) -> User
+        + assign_role(user_id: UUID, role: str) -> User
+        + update_tariff(tariff: Tariff) -> Tariff
+        + restart_task(task_id: UUID) -> None
+        + register_contract(policy_number: str) -> None
+        + ask_client(claim_id: UUID, text: str) -> None
+        + find_policies(query: str) -> list[Policy]
+        + get_payments() -> list[Payment]
+        + get_margin() -> list[MarginReport]
+        + request_invoice(start: datetime, end: datetime) -> None
+    }
+    class AdminService {
+        - _tariffs: ITariffRepository
+        - _users: IUserRepository
+        - _accidents: IAccidentRepository
+        - _mail: IEmailGateway
+        - _tasks: ITaskQueue
+        - _audit: AuditService
+    }
+    class AccessService {
+        - _users: IUserRepository
+        - _sms: ISmsGateway
+        - _strategy: AccessStrategy
+        + request_code(phone: str) -> None
+        + issue_token(phone: str, code: str) -> TokenResponse
+        + check_permission(token: str, action: str) -> None
+    }
+    interface AccessStrategy {
+        + is_allowed(role: str, action: str) -> bool
+    }
+    class RolePermissionStrategy {
+        - _matrix: dict[str, set[str]]
+        + is_allowed(role: str, action: str) -> bool
+    }
+    class AuditService {
+        - _repo: IAccidentRepository
+        + log(event: AuditEvent) -> None
+        + log_event(actor: str, action: str, entity_id: UUID) -> None
+    }
+    interface IInspectionService {
+        + submit_results(inspection: Inspection) -> Inspection
+        + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
+        + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+        + get_protocol(claim_id: UUID) -> bytes
+    }
+    class InspectionService {
+        - _claims: IAccidentRepository
+        - _files: IFileRepository
+        - _audit: AuditService
+        - _tasks: ITaskQueue
+        - _ais: IAisOsagoGateway
+        - _require_claim(claim_id: UUID) -> AccidentClaim
+    }
+    interface IAccidentService {
+        + register_claim(claim: AccidentClaim) -> AccidentClaim
+        + assign_expert(claim_id: UUID) -> AccidentClaim
+        + change_status(claim_id: UUID, status: AccidentStatus) -> AccidentClaim
+        + get_claim(claim_id: UUID) -> AccidentClaim
+        + list_claims() -> list[AccidentClaim]
+    }
+    class AccidentService {
+        - _repo: IAccidentRepository
+        - _audit: AuditService
+        - _assignment: AssignmentStrategy
+        - _ais: IAisOsagoGateway
+        - _require_claim(claim_id: UUID) -> AccidentClaim
+    }
+    interface AssignmentStrategy {
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+    class FreeExpertStrategy {
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+    class RegionExpertStrategy {
+        + select_expert(claim: AccidentClaim) -> UUID
+    }
+    interface IPolicyService {
+        + calculate_premium(data: PolicyData) -> Decimal
+        + issue_policy(draft: PolicyData) -> Policy
+        + list_policies(holder_id: UUID) -> list[Policy]
+        + get_policy_pdf(policy_number: str) -> bytes
+        + save_agent_sales(report: AgentSales) -> None
+        + get_sales_report(start: date, end: date) -> SalesReport
+    }
+    class PolicyService {
+        - _tariffs: ITariffRepository
+        - _ais: IAisOsagoGateway
+        - _users: IUserRepository
+        - _files: IFileRepository
+        - _tasks: ITaskQueue
+        - _audit: AuditService
+    }
+    interface IPaymentService {
+        + create_session(policy_id: UUID, amount: Decimal) -> PaymentSession
+        + handle_webhook(event: PaymentEvent) -> None
+    }
+    class PaymentService {
+        - _gateway: IPaymentGateway
+        - _accidents: IAccidentRepository
+        - _tasks: ITaskQueue
+        - _audit: AuditService
+    }
+}
+
+package "Слой интеграции: фасады" #FFFDF2 {
+    interface IAisOsagoGateway {
+        + get_kbm(driver_license: str) -> Decimal
+        + check_vehicle(vin: str) -> bool
+        + check_drivers(licenses: list[str]) -> bool
+        + check_policy(claim: AccidentClaim) -> PolicyInfo
+        + register_policy(policy_data: dict) -> bool
+        + recheck_policy(policy_number: str) -> bool
+    }
+    class AisOsagoFacade {
+        - _http: HTTPClient
+    }
+    interface IEmailGateway {
+        + send_question(claim_id: UUID, text: str) -> None
+        + send_mail(to: str, subject: str, attachment: bytes | None) -> bool
+    }
+    class EmailFacade {
+        - _smtp: SMTPClient
+    }
+    interface IPaymentGateway {
+        + create_session(policy_id: UUID, amount: Decimal) -> PaymentSession
+        + get_receipts(day: date) -> list[Receipt]
+        + check_pending_transactions() -> list[dict]
+    }
+    class PaymentGatewayFacade {
+        - _http: HTTPClient
+    }
+    interface ISmsGateway {
+        + send_code(phone: str, code: str) -> None
+    }
+    class SmsGatewayFacade {
+        - _base_url: str
+        + send_code(phone: str, code: str) -> None
+    }
+    interface ITaskQueue {
+        + enqueue(task: TaskItem) -> UUID
+    }
+    class TaskQueueFacade {
+        - _repo: IAccidentRepository
+        + enqueue(task: TaskItem) -> UUID
+    }
+}
+
+package "Слой данных: репозитории" #FFFDF2 {
+    interface ITariffRepository {
+        + get_tariffs() -> list[Tariff]
+        + save_tariff(tariff: Tariff) -> Tariff
+        + save_report_log(entry: ReportLogEntry) -> None
+        + get_coefficients() -> dict
+        + save_margin_result(report: MarginReport) -> None
+        + get_margin_results(start: datetime, end: datetime) -> list[MarginReport]
+    }
+    class TariffRepository {
+        - _session: Session
+    }
+    interface IUserRepository {
+        + get_by_phone(phone: str) -> User | None
+        + list_users() -> list[User]
+        + save_user(user: User) -> User
+        + get_role(user_id: UUID) -> str
+        + find_policies(query: str) -> list[Policy]
+        + save_policy(policy: Policy) -> Policy
+        + get_policy(policy_number: str) -> Policy | None
+        + save_agent_sales(report: AgentSales) -> None
+    }
+    class UserRepository {
+        - _session: Session
+    }
+    interface IAccidentRepository {
+        + get_claim(claim_id: UUID) -> AccidentClaim | None
+        + save_claim(claim: AccidentClaim) -> AccidentClaim
+        + list_claims() -> list[AccidentClaim]
+        + list_free_experts(region: str | None) -> list[UUID]
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + save_task(task: TaskItem) -> UUID
+        + list_pending_tasks(limit: int) -> list[TaskItem]
+        + mark_task_done(task_id: UUID) -> None
+        + mark_task_failed(task_id: UUID) -> None
+        + save_inspection(inspection: Inspection) -> Inspection
+        + get_inspection(claim_id: UUID) -> Inspection | None
+        + save_transaction(tx: TransactionRecord) -> UUID
+        + list_payments() -> list[Payment]
+        + list_audit() -> list[AuditEvent]
+    }
+    class AccidentRepository {
+        - _connection: Connection
+    }
+    interface IFileRepository {
+        + save_photos(claim_id: UUID, photos: list[Photo]) -> list[UUID]
+        + get_photos(claim_id: UUID) -> list[Photo]
+        + save_signature(claim_id: UUID, signature: Signature) -> UUID
+        + save_pdf(claim_id: UUID, content: bytes) -> UUID
+        + get_pdf(claim_id: UUID) -> bytes | None
+        + save_policy_pdf(policy_number: str, content: bytes) -> UUID
+        + get_policy_pdf(policy_number: str) -> bytes | None
+        + get_claim_data(claim_id: UUID) -> dict
+        + delete_expired(older_than: datetime) -> int
+    }
+    class FileRepository {
+        - _db: Database
+        - _fs: GridFS
+    }
+}
+
+package "Домен: сущности и перечисления" #FFFDF2 {
+    enum AccidentStatus {
+        NEW
+        ASSIGNED
+        INSPECTION
+        COMPLETED
+    }
+    enum TaskType {
+        PDF_PROTOCOL
+        PDF_POLICY
+        POLICY_RECHECK
+        REPORT
+        MARGIN_CALC
+        CONTRACT_REG
+        EMAIL_SEND
+    }
+    class AccidentClaim {
+        + claim_id: UUID
+        + number: str
+        + policy_number: str
+        + region: str
+        + status: AccidentStatus
+        + expert_id: UUID | None
+        + assign(expert_id: UUID) -> None
+        + transition(status: AccidentStatus) -> None
+    }
+    class Inspection {
+        + inspection_id: UUID
+        + claim_id: UUID
+        + expert_id: UUID
+        + damage_found: bool
+        + notes: str
+    }
+    class Signature {
+        + signature_id: UUID
+        + claim_id: UUID
+        + signed_by: str
+        + verified: bool
+    }
+    enum TaskStatus {
+        PENDING
+        DONE
+        FAILED
+    }
+    class TaskItem {
+        + task_id: UUID
+        + type: TaskType
+        + claim_id: UUID | None
+        + payload: dict
+        + status: TaskStatus
+        + created_at: datetime
+    }
+    class Policy {
+        + policy_id: UUID
+        + policy_number: str
+        + holder_id: UUID
+        + status: str
+        + premium: Decimal
+        + expires_at: datetime
+    }
+    class TransactionRecord {
+        + transaction_id: UUID
+        + policy_number: str
+        + amount: Decimal
+        + status: str
+        + created_at: datetime
+    }
+    class AuditEvent {
+        + event_id: UUID
+        + actor: str
+        + action: str
+        + entity_id: UUID
+        + occurred_at: datetime
+    }
+    class PolicyInfo {
+        + number: str
+        + is_valid: bool
+        + expires_at: datetime
+    }
+}
+
+' --- Зависимости (из связей компонентов L3) ---
+PaymentController ..> IPaymentService
+AdminController ..> IAdminService
+AuthController ..> AccessService
+AccidentController ..> IAccidentService
+InspectionController ..> IInspectionService
+AdminController ..> AccessService : "RBAC"
+InspectionController ..> AccessService : "RBAC"
+AccidentController ..> AccessService : "RBAC"
+PaymentController ..> AccessService : "RBAC"
+AdminService ..> AuditService : "аудит"
+InspectionService ..> AuditService : "аудит"
+AccidentService ..> AuditService : "аудит"
+PaymentService ..> AuditService : "аудит"
+AdminService ..> ITariffRepository
+AdminService ..> IUserRepository
+AdminService ..> IEmailGateway
+AccessService ..> IUserRepository
+AccessService ..> ISmsGateway
+AuditService ..> IAccidentRepository
+InspectionService ..> IFileRepository
+InspectionService ..> ITaskQueue
+InspectionService ..> IAisOsagoGateway
+AdminService ..> IAccidentRepository
+PaymentService ..> IAccidentRepository
+AccidentService ..> IAccidentRepository
+AccidentService ..> IAisOsagoGateway
+PaymentService ..> IPaymentGateway
+PaymentService ..> ITaskQueue
+AdminService ..> ITaskQueue
+TaskQueueFacade ..> IAccidentRepository
+
+' --- Добавлено по L2: расчет премии и оформление полиса (Web App -> API) ---
+PolicyController ..> IPolicyService
+PolicyController ..> AccessService : "RBAC"
+PolicyService ..> AuditService : "аудит"
+PolicyService ..> ITariffRepository
+PolicyService ..> IAisOsagoGateway
+PolicyService ..> IUserRepository
+PolicyService ..> IFileRepository
+PolicyService ..> ITaskQueue
+IPolicyService <|.. PolicyService
+IPolicyService ..> Policy
+TaskItem ..> TaskStatus
+' --- Реализации и прочие связи ---
+IAdminService <|.. AdminService
+IAccidentService <|.. AccidentService
+IInspectionService <|.. InspectionService
+IPaymentService <|.. PaymentService
+ITariffRepository <|.. TariffRepository
+IEmailGateway <|.. EmailFacade
+IUserRepository <|.. UserRepository
+ISmsGateway <|.. SmsGatewayFacade
+IAccidentRepository <|.. AccidentRepository
+IFileRepository <|.. FileRepository
+ITaskQueue <|.. TaskQueueFacade
+IAisOsagoGateway <|.. AisOsagoFacade
+IPaymentGateway <|.. PaymentGatewayFacade
+AccessStrategy <|.. RolePermissionStrategy
+AssignmentStrategy <|-- FreeExpertStrategy
+AssignmentStrategy <|-- RegionExpertStrategy
+AccidentService ..> AssignmentStrategy : "выбор эксперта"
+AccessService ..> AccessStrategy
+AccidentClaim ..> AccidentStatus
+TaskItem ..> TaskType
+IAccidentRepository ..> AccidentClaim
+IAccidentRepository ..> TransactionRecord
+IInspectionService ..> Inspection
+IFileRepository ..> Signature
+
+@enduml
