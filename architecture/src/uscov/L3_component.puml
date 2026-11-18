@@ -36,7 +36,7 @@ ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транз
 ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты и акты")
 
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка договоров страхования,\nсведения о полисах", $tags="ext")
-System_Ext(bank_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
 
 Rel(web_app, auth_comp, "Проверка сессии", "REST/HTTPS, JSON")
 Rel(web_app, margin_comp, "Запрос расчета маржи и КВ", "REST/HTTPS, JSON")
@@ -68,7 +68,7 @@ Rel(report_comp, files_repo, "Выгрузка сгенерированных о
 
 Rel(auth_comp, users_repo, "Проверка учетных записей", "Python (in-process)")
 Rel(access_comp, users_repo, "Роли и права (RBAC)", "Python (in-process)")
-Rel(bank_gateway, bank_sys, "Запрос статусов платежей", "HTTPS, JSON")
+Rel(bank_gateway, payment_sys, "Запрос статусов платежей", "HTTPS, JSON")
 Rel(ais_gateway, ais_osago, "Проверка полиса в РСА", "HTTPS, JSON, mTLS")
 Rel(task_queue_comp, audit_repo, "Запись задачи в очередь outbox", "Python (in-process)")
 

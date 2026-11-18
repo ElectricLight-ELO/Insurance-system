@@ -36,7 +36,7 @@ Deployment_Node(server, "Корпоративный сервер (on-prem)", "Do
 }
 
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договорах", $tags="ext")
-System_Ext(bank_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
 System_Ext(email_sys, "E-mail система", "Доставка финансовых отчетов\nи уведомлений бухгалтеру", $tags="ext")
 
 Rel(workstation, nginx_node, "Загружает приложение, инициирует расчеты маржи,\nзапускает сверку платежей", "HTTPS, TCP 443, TLS 1.2+, HSTS")
@@ -53,7 +53,7 @@ Rel(worker, db_files, "Сохранение сгенерированных\nPDF-
 Rel(pg_primary, pg_replica, "Потоковая репликация (hot standby)", "SQL, TCP 5432, TLS")
 
 Rel(api, ais_osago, "Проверка актуальности полисов\nпри расчете маржи", "HTTPS, mTLS, TCP 443")
-Rel(worker, bank_sys, "Сверка зависших транзакций\nс банковским эквайрингом", "HTTPS / REST API, TCP 443")
+Rel(worker, payment_sys, "Сверка зависших транзакций\nс банковским эквайрингом", "HTTPS / REST API, TCP 443")
 Rel(worker, email_sys, "Рассылка итоговых финансовых отчетов\nбухгалтеру", "SMTPS, TCP 465 / STARTTLS, TCP 587")
 
 SHOW_LEGEND()

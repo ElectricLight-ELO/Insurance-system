@@ -15,7 +15,7 @@ Enterprise_Boundary(enterprise, "Корпоративная ИТ-инфраст�
 }
 
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Отраслевая система: проверка договоров,\nсведения о полисах", $tags="ext")
-System_Ext(bank, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nпроведение оплат, выписки, сверка", $tags="ext")
+System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nпроведение оплат, выписки, сверка", $tags="ext")
 System_Ext(email_sys, "E-mail система", "Рассылка финансовых отчетов\nи уведомлений бухгалтеру", $tags="ext")
 System_Ext(sms_sys, "SMS-шлюз", "Доставка одноразовых\nкодов авторизации", $tags="ext")
 System_Ext(soc, "Городской центр мониторинга ИБ (SOC)", "Инциденты ИБ корпоративной сети", $tags="ext")
@@ -29,7 +29,7 @@ Rel(mod_finance, osago_core, "Передача данных о проданны�
 Rel(mod_finance, crm, "Сведения об агентах\nи комиссионных ставках", "HTTPS, JSON")
 
 Rel(mod_finance, ais_osago, "Сверка данных по договорам\nпри финансовом аудите", "HTTPS, JSON, mTLS")
-Rel(mod_finance, bank, "Запрос статусов платежей,\nавтоматическая сверка оплат", "HTTPS, JSON")
+Rel(mod_finance, payment_sys, "Запрос статусов платежей,\nавтоматическая сверка оплат", "HTTPS, JSON")
 Rel(mod_finance, email_sys, "Отправка закрывающих отчетов\nи уведомлений бухгалтеру", "SMTP / STARTTLS", $tags="async")
 Rel(email_sys, accountant, "Доставка отчетов на e-mail", "E-mail", $tags="async")
 Rel(iam, sms_sys, "Отправка одноразового кода\nдля авторизации", "HTTPS, JSON")
