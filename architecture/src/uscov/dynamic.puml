@@ -1,0 +1,58 @@
+@startuml
+!include ../core/C4_Dynamic.puml
+LAYOUT_LEFT_RIGHT()
+
+title ИС ОСАГО, фин. контроль и маржа. Динамическая диаграмма — расчет маржи, КВ и сверка платежей
+
+Person(accountant, "Бухгалтер", "Ведет финансовый учет,\nконтролирует маржинальность", $tags="staff")
+Person(auditor, "Финансовый аудитор", "Анализирует потоки,\nпроверяет результаты сверки", $tags="staff")
+
+Container(web_app, "Web App", "React SPA", "Рабочее место бухгалтера\nи финансового менеджера,\nуправление отчетами")
+
+Container_Boundary(api, "API (FastAPI)") {
+    Component(margin_comp, "MarginController", "FastAPI Router", "Приём REST-запросов:\nрасчет маржи и КВ\nза период", $tags="layer_api")
+    Component(recon_comp, "ReconciliationController", "FastAPI Router", "Приём REST-запросов:\nзапуск сверки платежей", $tags="layer_api")
+    Component(margin_service, "MarginService", "Python Service", "Бизнес-логика расчета маржи,\nагентских комиссий (КВ),\nсобытия аудита", $tags="layer_service")
+    Component(recon_service, "ReconciliationService", "Python Service", "Бизнес-логика сверки\nзависших транзакций\nс эквайрингом", $tags="layer_service")
+    Component(bank_gateway, "PaymentGatewayFacade", "HTTP Client", "Изоляция вызова:\nзапрос статусов транзакций\nв Платежной системе", $tags="layer_integration")
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка задач\nв очередь outbox", $tags="layer_integration")
+    Component(audit_repo, "AuditRepository", "SQLAlchemy", "Доступ к аудиту,\nтранзакциям и очереди\nв PostgreSQL", $tags="layer_data")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам\nи коэффициентам\nв PostgreSQL", $tags="layer_data")
+}
+
+ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции,\nсобытия аудита, очередь задач (outbox)")
+ContainerDb(db_tariffs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты\nи PDF-документы")
+
+Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nрасчет маржи, периодическая сверка,\nгенерация отчетов")
+
+System_Ext(bank_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Доставка финансовых отчетов\nи уведомлений", $tags="ext")
+
+' === ФАЗА 1. РАСЧЕТ МАРЖИ И КВ (ШАГИ 1–6) ===
+Rel(web_app, margin_comp, "1. Запрос расчета маржи — trigger_margin()", "REST/HTTPS, JSON")
+Rel(margin_comp, margin_service, "2. Вызов calculate_period_margin() — инициация расчета", "Python (in-process)")
+Rel(margin_service, tariff_repo, "3. Вызов get_tariffs() — получение тарифных ставок и КВ", "Python (in-process)")
+Rel(tariff_repo, db_tariffs, "4. Чтение тарифных коэффициентов из БД", "SQL/TCP 5432")
+Rel(margin_service, audit_repo, "5. Вызов get_transactions() — чтение портфеля полисов", "Python (in-process)")
+Rel(audit_repo, db_audit, "6. Чтение финансовых транзакций за период", "SQL/TCP 5432")
+
+' === ФАЗА 2. СВЕРКА ПЛАТЕЖЕЙ И OUTBOX (ШАГИ 7–12) ===
+Rel(web_app, recon_comp, "7. Запуск сверки платежей — trigger_reconciliation()", "REST/HTTPS, JSON")
+Rel(recon_comp, recon_service, "8. Вызов reconcile_payments() — обработка зависших оплат", "Python (in-process)")
+Rel(recon_service, audit_repo, "9. Вызов get_pending_transactions() — поиск зависших оплат", "Python (in-process)")
+Rel(audit_repo, db_audit, "10. Выборка платежей со статусом PENDING", "SQL/TCP 5432")
+Rel(recon_service, bank_gateway, "11. Вызов check_transaction_status() — запрос в банк", "Python (in-process)")
+Rel(bank_gateway, bank_sys, "12. Запрос актуальных статусов транзакций", "HTTPS, JSON")
+
+' === ФАЗА 3. ФОНОВАЯ ОБРАБОТКА И ОТПРАВКА ОТЧЕТА (ШАГИ 13–16) ===
+Rel(margin_service, task_queue_comp, "13. Вызов enqueue() — постановка фоновой задачи MARGIN_CALC", "Python (in-process)")
+Rel(task_queue_comp, audit_repo, "14. Вызов save_task() — запись задачи в очередь outbox", "SQL/TCP 5432")
+Rel(worker, db_audit, "15. Celery Beat/Worker: выборка задач и обновление статусов", "SQL/TCP 5432")
+Rel(worker, email_sys, "16. Отправка итогового финансового отчета бухгалтеру", "SMTP / STARTTLS")
+
+Rel(email_sys, accountant, "Доставка итогового финансового отчета", "E-mail", $tags="async")
+Rel(accountant, web_app, "Инициирует расчеты,\nуправляет отчетами", "HTTPS")
+
+SHOW_LEGEND()
+@enduml

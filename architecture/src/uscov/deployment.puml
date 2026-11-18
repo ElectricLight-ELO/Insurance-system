@@ -1,0 +1,60 @@
+@startuml
+!include ../core/C4_Deployment.puml
+
+title ИС ОСАГО, фин. контроль и маржа. Deployment — локальный сегмент модуля бухгалтерии и фин. контроля
+
+LAYOUT_TOP_DOWN()
+
+Deployment_Node(workstation, "Рабочие места бухгалтера, аудитора и фин. менеджера", "ПК / ноутбук, веб-браузер") {
+    Container(web_app, "Web App", "React SPA", "Рабочее место бухгалтера и фин. менеджера,\nуправление расчетами и отчетами")
+}
+
+Deployment_Node(server, "Корпоративный сервер (on-prem)", "Docker host, Linux, 16 CPU / 32 GB") {
+    Deployment_Node(net, "Изолированная docker-сеть 172.20.0.0/16 (bridge)") {
+
+        Deployment_Node(nginx_node, "Nginx Reverse Proxy", "Nginx", "Единственная точка входа :443/TCP, TLS 1.2+, HSTS;\nраздача статического бандла Web App,\nбалансировка round-robin с health check")
+
+        Deployment_Node(api_cluster, "Кластер API, 2 реплики", "Docker-контейнеры, :8000/TCP") {
+            Container(api, "API", "FastAPI", "REST/HTTPS JSON — расчет маржи, КВ,\nзапуск сверки зависших платежей,\nвыдача финансовой отчетности")
+        }
+
+        Deployment_Node(worker_cluster, "Узлы Worker, 2 инстанса", "Docker-контейнеры") {
+            Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nрасчет маржи, сверка с эквайрингом,\nгенерация PDF-отчетов")
+        }
+
+        Deployment_Node(pg_primary, "Сервер PostgreSQL (primary)", "PostgreSQL") {
+            ContainerDb(db_tariffs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+            ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции, аудит,\nочередь задач (outbox)")
+        }
+
+        Deployment_Node(pg_replica, "Сервер PostgreSQL (replica)", "PostgreSQL, hot standby, только чтение")
+
+        Deployment_Node(mongo_primary, "Сервер MongoDB (primary)", "MongoDB, GridFS") {
+            ContainerDb(db_files, "DB_FILES", "MongoDB", "Акты, финансовые отчеты\nи PDF-документы")
+        }
+    }
+}
+
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договорах", $tags="ext")
+System_Ext(bank_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Доставка финансовых отчетов\nи уведомлений бухгалтеру", $tags="ext")
+
+Rel(workstation, nginx_node, "Загружает приложение, инициирует расчеты маржи,\nзапускает сверку платежей", "HTTPS, TCP 443, TLS 1.2+, HSTS")
+Rel(nginx_node, api, "Reverse proxy: распределяет запросы\nмежду репликами API (round-robin)", "HTTP, TCP 8000")
+
+Rel(api, db_tariffs, "Чтение тарифных коэффициентов\nи ставок КВ", "SQL, TCP 5432, TLS")
+Rel(api, db_audit, "Чтение транзакций, запись логов аудита,\nпостановка задач в outbox", "SQL, TCP 5432, TLS")
+Rel(api, db_files, "Сохранение и выдача\nфинансовых PDF-отчетов", "MongoDB, TCP 27017, TLS")
+
+Rel(worker, db_audit, "Опрос очереди outbox,\nобновление статусов транзакций", "SQL, TCP 5432, TLS")
+Rel(worker, db_tariffs, "Чтение тарифных сеток\nпри расчете маржи", "SQL, TCP 5432, TLS")
+Rel(worker, db_files, "Сохранение сгенерированных\nPDF-отчетов в GridFS", "MongoDB, TCP 27017, TLS")
+
+Rel(pg_primary, pg_replica, "Потоковая репликация (hot standby)", "SQL, TCP 5432, TLS")
+
+Rel(api, ais_osago, "Проверка актуальности полисов\nпри расчете маржи", "HTTPS, mTLS, TCP 443")
+Rel(worker, bank_sys, "Сверка зависших транзакций\nс банковским эквайрингом", "HTTPS / REST API, TCP 443")
+Rel(worker, email_sys, "Рассылка итоговых финансовых отчетов\nбухгалтеру", "SMTPS, TCP 465 / STARTTLS, TCP 587")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,263 @@
+@startuml
+!include ../core/class_style.puml
+
+title ИС ОСАГО, фин. контроль и маржа. UML CLASS DIAGRAM — компонент "API (FastAPI)"
+
+' =====================================================
+' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
+' =====================================================
+package "Слой API: контроллеры (FastAPI Router)" {
+
+    class MarginController {
+- _service: IMarginService
+        + __init__(service: IMarginService) -> None
+        + trigger_margin(request: MarginCalculationRequest) -> MarginResult
+        + get_margin_status(period_id: UUID) -> MarginStatus
+    }
+
+    class ReconciliationController {
+- _service: IReconciliationService
+        + __init__(service: IReconciliationService) -> None
+        + trigger_reconciliation() -> ReconciliationReport
+        + get_pending_transactions() -> list[Transaction]
+    }
+}
+
+' =====================================================
+' СЛОЙ БИЗНЕС-ЛОГИКИ: СЕРВИСЫ
+' =====================================================
+package "Слой бизнес-логики: сервисы" {
+
+    interface IMarginService {
+        + calculate_period_margin(period: str) -> MarginResult
+        + calculate_agent_commission(agent_id: UUID) -> float
+    }
+
+    class MarginService {
+- _audit_repo: IAuditRepository
+- _tariff_repo: ITariffRepository
+- _audit: AuditService
+- _commission_strategy: CommissionStrategy
+        + __init__(audit_repo: IAuditRepository, tariff_repo: ITariffRepository, audit: AuditService, commission_strategy: CommissionStrategy) -> None
+        + calculate_period_margin(period: str) -> MarginResult
+        + calculate_agent_commission(agent_id: UUID) -> float
+- _audit_event(actor: str, action: str, entity_id: UUID) -> None
+    }
+
+    interface IReconciliationService {
+        + reconcile_payments() -> ReconciliationReport
+        + check_pending_payment(transaction_id: UUID) -> PaymentStatus
+    }
+
+    class ReconciliationService {
+- _audit_repo: IAuditRepository
+- _files: IFileRepository
+- _audit: AuditService
+- _tasks: TaskQueueFacade
+- _bank: PaymentGatewayFacade
+        + __init__(audit_repo: IAuditRepository, files: IFileRepository, audit: AuditService, tasks: TaskQueueFacade, bank: PaymentGatewayFacade) -> None
+        + reconcile_payments() -> ReconciliationReport
+        + check_pending_payment(transaction_id: UUID) -> PaymentStatus
+- _audit_event(actor: str, action: str, entity_id: UUID) -> None
+    }
+
+    class AuditService {
+- _repo: IAuditRepository
+        + __init__(repo: IAuditRepository) -> None
+        + log(event: AuditEvent) -> None
+    }
+}
+
+' =====================================================
+' ПАТТЕРН STRATEGY: АЛГОРИТМЫ РАСЧЕТА КВ (КОМИССИЙ)
+' =====================================================
+package "Strategy: алгоритмы расчета КВ" {
+
+    interface CommissionStrategy {
+        + calculate_kv(premium: float, tariff: Tariff) -> float
+    }
+
+    class StandardCommissionStrategy {
+        + calculate_kv(premium: float, tariff: Tariff) -> float
+    }
+
+    class PremiumCommissionStrategy {
+        + calculate_kv(premium: float, tariff: Tariff) -> float
+    }
+}
+
+' =====================================================
+' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ
+' =====================================================
+package "Слой интеграции: фасады" {
+
+    class TaskQueueFacade {
+- _session: Session
+        + __init__(session: Session) -> None
+        + enqueue(task: TaskItem) -> UUID
+    }
+
+    class PaymentGatewayFacade {
+- _http: HTTPClient
+        + __init__(http: HTTPClient) -> None
+        + check_transaction_status(transaction_id: UUID) -> str
+    }
+}
+
+' =====================================================
+' СЛОЙ ДАННЫХ: РЕПОЗИТОРИИ
+' =====================================================
+package "Слой данных: репозитории" {
+
+    interface IAuditRepository {
+        + get_transaction(tx_id: UUID) -> Transaction | None
+        + list_pending_transactions() -> list[Transaction]
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + save_task(task: TaskItem) -> UUID
+    }
+
+    class AuditRepository {
+- _session: Session
+        + get_transaction(tx_id: UUID) -> Transaction | None
+        + list_pending_transactions() -> list[Transaction]
+        + save_audit(event: AuditEvent) -> AuditEvent
+        + save_task(task: TaskItem) -> UUID
+    }
+
+    interface ITariffRepository {
+        + get_tariff(region: str) -> Tariff | None
+        + list_tariffs() -> list[Tariff]
+    }
+
+    class TariffRepository {
+- _session: Session
+        + get_tariff(region: str) -> Tariff | None
+        + list_tariffs() -> list[Tariff]
+    }
+
+    interface IFileRepository {
+        + save_pdf(report_id: UUID, content: bytes) -> UUID
+        + get_pdf(report_id: UUID) -> bytes | None
+    }
+
+    class FileRepository {
+- _db: Database
+- _fs: GridFS
+        + save_pdf(report_id: UUID, content: bytes) -> UUID
+        + get_pdf(report_id: UUID) -> bytes | None
+    }
+}
+
+' =====================================================
+' ДОМЕН: СУЩНОСТИ И ПЕРЕЧИСЛЕНИЯ
+' =====================================================
+package "Домен: сущности и перечисления" {
+
+    enum TransactionStatus {
+        PENDING
+        COMPLETED
+        FAILED
+    }
+
+    enum TaskType {
+        MARGIN_CALC
+        PDF_REPORT
+    }
+
+    class Transaction {
+- transaction_id: UUID
+- policy_number: str
+- amount: float
+- commission_kv: float
+- status: TransactionStatus
+- created_at: datetime
+        + update_status(status: TransactionStatus) -> None
+    }
+
+    class Tariff {
+- tariff_id: UUID
+- region: str
+- base_rate: float
+- kv_rate: float
+    }
+
+    class MarginResult {
+- period: str
+- total_premium: float
+- total_kv: float
+- net_margin: float
+    }
+
+    class AuditEvent {
+- event_id: UUID
+- actor: str
+- action: str
+- entity_id: UUID
+- occurred_at: datetime
+    }
+
+    class TaskItem {
+- task_id: UUID
+- type: TaskType
+- reference_id: UUID
+- created_at: datetime
+    }
+}
+
+' =====================================================
+' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
+' =====================================================
+MarginService ..|> IMarginService
+ReconciliationService ..|> IReconciliationService
+AuditRepository ..|> IAuditRepository
+TariffRepository ..|> ITariffRepository
+FileRepository ..|> IFileRepository
+StandardCommissionStrategy ..|> CommissionStrategy
+PremiumCommissionStrategy ..|> CommissionStrategy
+
+' =====================================================
+' СВЯЗИ: ВНЕДРЕНИЕ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' =====================================================
+MarginController ..> IMarginService : "DI"
+ReconciliationController ..> IReconciliationService : "DI"
+
+MarginService ..> IAuditRepository : "DI"
+MarginService ..> ITariffRepository : "DI"
+MarginService ..> AuditService : "DI"
+MarginService o--> CommissionStrategy : "агрегация, DI,\nподмена в рантайме"
+
+ReconciliationService ..> IAuditRepository : "DI"
+ReconciliationService ..> IFileRepository : "DI"
+ReconciliationService ..> AuditService : "DI"
+ReconciliationService ..> TaskQueueFacade : "DI"
+ReconciliationService ..> PaymentGatewayFacade : "DI"
+
+AuditService ..> IAuditRepository : "DI"
+
+' =====================================================
+' СВЯЗИ: СЕРВИСЫ -> ДОМЕН (создание / использование)
+' =====================================================
+MarginService ..> MarginResult : "creates"
+MarginService ..> AuditEvent : "creates"
+ReconciliationService ..> AuditEvent : "creates"
+ReconciliationService ..> TaskItem : "enqueues"
+AuditService ..> AuditEvent : "uses"
+
+' =====================================================
+' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
+' =====================================================
+TaskQueueFacade ..> TaskItem
+PaymentGatewayFacade ..> Transaction
+AuditRepository ..> Transaction
+AuditRepository ..> AuditEvent
+AuditRepository ..> TaskItem
+TariffRepository ..> Tariff
+
+' =====================================================
+' СВЯЗИ: ВНУТРИ ДОМЕНА
+' =====================================================
+Transaction ..> TransactionStatus
+TaskItem ..> TaskType
+MarginResult ..> Transaction : "aggregates"
+
+@enduml
