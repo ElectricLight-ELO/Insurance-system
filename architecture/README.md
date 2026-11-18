@@ -60,3 +60,16 @@ python3 scripts/build_index.py                 # карта docs/index.html
 2. Разработчик: ветка `feature/<фамилия>-c4` от свежего `main`, коммиты только в свою папку → PR в `main`.
 3. CI ❌ → разработчик читает лог в Actions, исправляет, пушит снова до ✅.
 4. Тимлид оставляет комментарии ревью в коде, после исправлений — Approve и Merge.
+
+## Промпты LLM и журнал применения (гл. 6 курсовой)
+
+`prompts/` — версионируемые промпты: `system_c4_architect.md` (System Prompt), `fewshot_rel.md` (Few-Shot),
+`cot_dynamic.md` (Chain-of-Thought). После применения LLM автор фиксирует результат:
+
+```bash
+python3 scripts/llm_log.py --prompt prompts/system_c4_architect.md --model "<модель>" \
+    --author <логин> --files src/<папка>/<файл>.puml --decision accepted|edited|rejected
+```
+
+Запись (паттерн, версия промпта, хэши файлов, результат check_rules) добавляется в `docs/llm_log.jsonl`.
+Персональные данные и тексты ответов модели в журнал не пишутся.
