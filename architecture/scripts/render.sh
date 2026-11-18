@@ -4,6 +4,8 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 JAR="${1:-$ROOT/plantuml.jar}"
+# Относительный путь к jar отсчитывается от каталога architecture — делаем абсолютным до cd
+case "$JAR" in /*) ;; *) JAR="$ROOT/$JAR";; esac
 export LC_ALL=C.UTF-8
 J=(java -Djava.awt.headless=true -Dfile.encoding=UTF-8 -DPLANTUML_LIMIT_SIZE=16384 -jar "$JAR")
 cd "$ROOT/src"
