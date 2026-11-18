@@ -21,19 +21,19 @@ Container_Boundary(api, "API (FastAPI)") {
 }
 
 ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции,\nсобытия аудита, очередь задач (outbox)")
-ContainerDb(db_tariffs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
 ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты\nи PDF-документы")
 
 Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nрасчет маржи, периодическая сверка,\nгенерация отчетов")
 
-System_Ext(bank_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
 System_Ext(email_sys, "E-mail система", "Доставка финансовых отчетов\nи уведомлений", $tags="ext")
 
 ' === ФАЗА 1. РАСЧЕТ МАРЖИ И КВ (ШАГИ 1–6) ===
 Rel(web_app, margin_comp, "1. Запрос расчета маржи — trigger_margin()", "REST/HTTPS, JSON")
 Rel(margin_comp, margin_service, "2. Вызов calculate_period_margin() — инициация расчета", "Python (in-process)")
 Rel(margin_service, tariff_repo, "3. Вызов get_tariffs() — получение тарифных ставок и КВ", "Python (in-process)")
-Rel(tariff_repo, db_tariffs, "4. Чтение тарифных коэффициентов из БД", "SQL/TCP 5432")
+Rel(tariff_repo, db_tarifs, "4. Чтение тарифных коэффициентов из БД", "SQL/TCP 5432")
 Rel(margin_service, audit_repo, "5. Вызов get_transactions() — чтение портфеля полисов", "Python (in-process)")
 Rel(audit_repo, db_audit, "6. Чтение финансовых транзакций за период", "SQL/TCP 5432")
 
@@ -43,7 +43,7 @@ Rel(recon_comp, recon_service, "8. Вызов reconcile_payments() — обра�
 Rel(recon_service, audit_repo, "9. Вызов get_pending_transactions() — поиск зависших оплат", "Python (in-process)")
 Rel(audit_repo, db_audit, "10. Выборка платежей со статусом PENDING", "SQL/TCP 5432")
 Rel(recon_service, bank_gateway, "11. Вызов check_transaction_status() — запрос в банк", "Python (in-process)")
-Rel(bank_gateway, bank_sys, "12. Запрос актуальных статусов транзакций", "HTTPS, JSON")
+Rel(bank_gateway, payment_sys, "12. Запрос актуальных статусов транзакций", "HTTPS, JSON")
 
 ' === ФАЗА 3. ФОНОВАЯ ОБРАБОТКА И ОТПРАВКА ОТЧЕТА (ШАГИ 13–16) ===
 Rel(margin_service, task_queue_comp, "13. Вызов enqueue() — постановка фоновой задачи MARGIN_CALC", "Python (in-process)")

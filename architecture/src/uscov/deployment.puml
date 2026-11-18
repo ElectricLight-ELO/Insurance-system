@@ -23,7 +23,7 @@ Deployment_Node(server, "Корпоративный сервер (on-prem)", "Do
         }
 
         Deployment_Node(pg_primary, "Сервер PostgreSQL (primary)", "PostgreSQL") {
-            ContainerDb(db_tariffs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+            ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
             ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции, аудит,\nочередь задач (outbox)")
         }
 
@@ -42,12 +42,12 @@ System_Ext(email_sys, "E-mail система", "Доставка финансо�
 Rel(workstation, nginx_node, "Загружает приложение, инициирует расчеты маржи,\nзапускает сверку платежей", "HTTPS, TCP 443, TLS 1.2+, HSTS")
 Rel(nginx_node, api, "Reverse proxy: распределяет запросы\nмежду репликами API (round-robin)", "HTTP, TCP 8000")
 
-Rel(api, db_tariffs, "Чтение тарифных коэффициентов\nи ставок КВ", "SQL, TCP 5432, TLS")
+Rel(api, db_tarifs, "Чтение тарифных коэффициентов\nи ставок КВ", "SQL, TCP 5432, TLS")
 Rel(api, db_audit, "Чтение транзакций, запись логов аудита,\nпостановка задач в outbox", "SQL, TCP 5432, TLS")
 Rel(api, db_files, "Сохранение и выдача\nфинансовых PDF-отчетов", "MongoDB, TCP 27017, TLS")
 
 Rel(worker, db_audit, "Опрос очереди outbox,\nобновление статусов транзакций", "SQL, TCP 5432, TLS")
-Rel(worker, db_tariffs, "Чтение тарифных сеток\nпри расчете маржи", "SQL, TCP 5432, TLS")
+Rel(worker, db_tarifs, "Чтение тарифных сеток\nпри расчете маржи", "SQL, TCP 5432, TLS")
 Rel(worker, db_files, "Сохранение сгенерированных\nPDF-отчетов в GridFS", "MongoDB, TCP 27017, TLS")
 
 Rel(pg_primary, pg_replica, "Потоковая репликация (hot standby)", "SQL, TCP 5432, TLS")
