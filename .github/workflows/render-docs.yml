@@ -16,13 +16,14 @@ permissions:
 
 env:
   PLANTUML_VERSION: "1.2024.7"
+  GRAPHVIZ_DOT: "/usr/bin/dot"
 
 jobs:
   validate-and-render:
     runs-on: ubuntu-latest
     defaults:
       run:
-        shell: bash   # bash -eo pipefail: ошибка скрипта не теряется за tee
+        shell: bash          
         working-directory: architecture
     steps:
       - name: Checkout repository code
@@ -38,6 +39,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz fonts-liberation
+          # Диагностика: dot должен быть доступен до рендера
+          which dot
+          dot -V
+          echo "GRAPHVIZ_DOT=$(which dot)"
 
       - name: Download PlantUML Jar Executable
         run: |
@@ -50,7 +55,12 @@ jobs:
           python3 scripts/check_rules.py 2>&1 | tee docs/ci_rules.log
 
       - name: Validate Syntax and Compile Diagrams to PNG/SVG
-        run: bash scripts/render.sh plantuml.jar 2>&1 | tee docs/ci_render.log
+        env:
+          GRAPHVIZ_DOT: /usr/bin/dot
+        run: |
+          # PlantUML не создаёт вложенные каталоги сам — готовим заранее
+          mkdir -p docs/images docs/images/team_tagan
+          bash scripts/render.sh plantuml.jar 2>&1 | tee docs/ci_render.log
 
       - name: Build interactive architecture map
         run: python3 scripts/build_index.py
@@ -67,7 +77,7 @@ jobs:
 
       - name: Commit and Push Rendered Artifacts
         if: github.event_name == 'push'
-        continue-on-error: true   # если main защищена от push бота — артефакты остаются в Upload artifacts
+        continue-on-error: true   
         run: |
           git config --global user.name 'DevOps Bot'
           git config --global user.email 'devops-bot@users.noreply.github.com'
