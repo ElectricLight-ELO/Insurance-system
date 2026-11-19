@@ -1,0 +1,1041 @@
+{
+ "version": 1,
+ "containers": {
+  "api": {
+   "title": "API",
+   "tech": "FastAPI",
+   "owner": "Дима",
+   "diagram": "united/un_comp/api_component.puml"
+  },
+  "worker": {
+   "title": "Worker",
+   "tech": "Python / Celery",
+   "owner": "Миша",
+   "diagram": "united/un_comp/worker_component.puml"
+  },
+  "backoffice": {
+   "title": "Backoffice",
+   "tech": "React SPA",
+   "owner": "Амелия",
+   "diagram": "united/un_comp/backoffice_component.puml"
+  },
+  "webapp": {
+   "title": "Web App",
+   "tech": "React SPA",
+   "owner": "Никита",
+   "diagram": "united/un_comp/webapp_component.puml"
+  }
+ },
+ "homonyms": {
+  "AuthLogic": [
+   "same_role",
+   "Одна и та же логика хранения токена и роли; допускается общий пакет фронта."
+  ],
+  "HttpClient": [
+   "same_role",
+   "Один и тот же axios-клиент; допускается общий пакет фронта."
+  ],
+  "AppRouter": [
+   "different_role",
+   "Разные наборы маршрутов и ролей (Web App — клиент/агент/эксперт, Backoffice — админ/поддержка/финансы)."
+  ],
+  "AuthApiClient": [
+   "different_role",
+   "Один и тот же endpoint входа по коду, но разные клиенты; тело запроса задаёт contracts.auth."
+  ],
+  "AuditService": [
+   "different_role",
+   "API пишет события аудита, Worker пишет статусы задач и логи."
+  ],
+  "AisOsagoFacade": [
+   "same_interface",
+   "API: КБМ, ТС, водители, полис. Worker: регистрация договора, повторная проверка. Нужен ОДИН интерфейс IAisOsagoGateway."
+  ],
+  "EmailFacade": [
+   "same_interface",
+   "API: вопросы и корректировки. Worker: полисы, чеки, отчёты. Нужен один интерфейс IEmailGateway."
+  ],
+  "PaymentGatewayFacade": [
+   "same_interface",
+   "API: создание сессии и отчёты о поступлениях. Worker: статусы платежей для сверки. Один интерфейс IPaymentGateway."
+  ],
+  "FileRepository": [
+   "same_interface",
+   "API пишет фото и подписи, Worker читает их и пишет PDF. Один интерфейс IFileRepository и одна схема документов DB_FILES."
+  ],
+  "TariffRepository": [
+   "same_interface",
+   "API читает и меняет тарифы, Worker читает данные для расчёта и пишет маржу. Одна схема DB_TARIFS."
+  ]
+ },
+ "components": [
+  {
+   "id": "api.AdminController",
+   "container": "api",
+   "name": "AdminController",
+   "layer": "Контроллеры",
+   "tech": "FastAPI Router",
+   "desc": "Пользователи, тарифы, аудит, задачи, полисы, финансовые отчеты",
+   "owner": "Дима",
+   "alias": "c_adm",
+   "status": "changed"
+  },
+  {
+   "id": "api.AuthController",
+   "container": "api",
+   "name": "AuthController",
+   "layer": "Контроллеры",
+   "tech": "FastAPI Router",
+   "desc": "Вход по одноразовому коду",
+   "owner": "Дима",
+   "alias": "c_auth",
+   "status": "changed"
+  },
+  {
+   "id": "api.InspectionController",
+   "container": "api",
+   "name": "InspectionController",
+   "layer": "Контроллеры",
+   "tech": "FastAPI Router",
+   "desc": "Результаты осмотра, фото, подпись",
+   "owner": "Дима",
+   "alias": "c_insp",
+   "status": "base"
+  },
+  {
+   "id": "api.AccidentController",
+   "container": "api",
+   "name": "AccidentController",
+   "layer": "Контроллеры",
+   "tech": "FastAPI Router",
+   "desc": "Заявления о ДТП, назначение эксперта",
+   "owner": "Дима",
+   "alias": "c_acc",
+   "status": "base"
+  },
+  {
+   "id": "api.PaymentController",
+   "container": "api",
+   "name": "PaymentController",
+   "layer": "Контроллеры",
+   "tech": "FastAPI Router",
+   "desc": "Оплата, webhook",
+   "owner": "Дима",
+   "alias": "c_pay",
+   "status": "changed"
+  },
+  {
+   "id": "api.AdminService",
+   "container": "api",
+   "name": "AdminService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Учетные записи, тарифы, финансы, вопросы клиентам",
+   "owner": "Дима",
+   "alias": "s_adm",
+   "status": "changed"
+  },
+  {
+   "id": "api.AccessService",
+   "container": "api",
+   "name": "AccessService",
+   "layer": "Сервисы",
+   "tech": "Python · Strategy",
+   "desc": "Выпуск токена и проверка прав (RBAC)",
+   "owner": "Дима",
+   "alias": "acc",
+   "status": "changed"
+  },
+  {
+   "id": "api.AuditService",
+   "container": "api",
+   "name": "AuditService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Запись событий аудита по каждому действию",
+   "owner": "Дима",
+   "alias": "aud",
+   "status": "base"
+  },
+  {
+   "id": "api.InspectionService",
+   "container": "api",
+   "name": "InspectionService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Акт осмотра, подпись, задача на PDF",
+   "owner": "Дима",
+   "alias": "s_insp",
+   "status": "base"
+  },
+  {
+   "id": "api.AccidentService",
+   "container": "api",
+   "name": "AccidentService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Заявление, проверка полиса, назначение",
+   "owner": "Дима",
+   "alias": "s_acc",
+   "status": "changed"
+  },
+  {
+   "id": "api.PaymentService",
+   "container": "api",
+   "name": "PaymentService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Платежная сессия, обработка webhook",
+   "owner": "Дима",
+   "alias": "s_pay",
+   "status": "changed"
+  },
+  {
+   "id": "api.TariffRepository",
+   "container": "api",
+   "name": "TariffRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Тарифы, лог отчетов",
+   "owner": "Дима",
+   "alias": "r_tar",
+   "status": "changed"
+  },
+  {
+   "id": "api.EmailFacade",
+   "container": "api",
+   "name": "EmailFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "SMTP Client",
+   "desc": "Вопросы и корректировки",
+   "owner": "Дима",
+   "alias": "f_mail",
+   "status": "changed"
+  },
+  {
+   "id": "api.UserRepository",
+   "container": "api",
+   "name": "UserRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Пользователи, роли, клиенты, полисы",
+   "owner": "Дима",
+   "alias": "r_user",
+   "status": "changed"
+  },
+  {
+   "id": "api.SmsGatewayFacade",
+   "container": "api",
+   "name": "SmsGatewayFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "HTTP Client",
+   "desc": "Отправка кода",
+   "owner": "Дима",
+   "alias": "f_sms",
+   "status": "changed"
+  },
+  {
+   "id": "api.AccidentRepository",
+   "container": "api",
+   "name": "AccidentRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Заявления, акты, транзакции, аудит и очередь",
+   "owner": "Дима",
+   "alias": "r_acc",
+   "status": "base"
+  },
+  {
+   "id": "api.FileRepository",
+   "container": "api",
+   "name": "FileRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "PyMongo",
+   "desc": "Фото, подписи, PDF",
+   "owner": "Дима",
+   "alias": "r_file",
+   "status": "base"
+  },
+  {
+   "id": "api.TaskQueueFacade",
+   "container": "api",
+   "name": "TaskQueueFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "SQL Client",
+   "desc": "Задачи в очередь для Worker",
+   "owner": "Дима",
+   "alias": "f_task",
+   "status": "base"
+  },
+  {
+   "id": "api.AisOsagoFacade",
+   "container": "api",
+   "name": "AisOsagoFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "HTTP Client",
+   "desc": "КБМ, ТС, водители, наличие полиса",
+   "owner": "Дима",
+   "alias": "f_ais",
+   "status": "base"
+  },
+  {
+   "id": "api.PaymentGatewayFacade",
+   "container": "api",
+   "name": "PaymentGatewayFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "HTTP Client",
+   "desc": "Сессии, отчеты о поступлениях",
+   "owner": "Дима",
+   "alias": "f_pay",
+   "status": "changed"
+  },
+  {
+   "id": "worker.OutboxPoller",
+   "container": "worker",
+   "name": "OutboxPoller",
+   "layer": "Прием задач",
+   "tech": "Celery Task",
+   "desc": "Забирает задачи из outbox",
+   "owner": "Миша",
+   "alias": "poll",
+   "status": "changed"
+  },
+  {
+   "id": "worker.Scheduler",
+   "container": "worker",
+   "name": "Scheduler",
+   "layer": "Прием задач",
+   "tech": "Celery Beat",
+   "desc": "Задачи по расписанию",
+   "owner": "Миша",
+   "alias": "beat",
+   "status": "changed"
+  },
+  {
+   "id": "worker.RegistrationTask",
+   "container": "worker",
+   "name": "RegistrationTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Регистрация договора, повторная проверка",
+   "owner": "Миша",
+   "alias": "t_con",
+   "status": "changed"
+  },
+  {
+   "id": "worker.PdfTask",
+   "container": "worker",
+   "name": "PdfTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "PDF полисов и протоколов",
+   "owner": "Миша",
+   "alias": "t_pdf",
+   "status": "changed"
+  },
+  {
+   "id": "worker.FileCleanupTask",
+   "container": "worker",
+   "name": "FileCleanupTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Удаление устаревших файлов",
+   "owner": "Миша",
+   "alias": "t_cln",
+   "status": "changed"
+  },
+  {
+   "id": "worker.NotificationTask",
+   "container": "worker",
+   "name": "NotificationTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Письма: полисы, чеки, протоколы, сбои",
+   "owner": "Миша",
+   "alias": "t_ntf",
+   "status": "changed"
+  },
+  {
+   "id": "worker.MarginCalculationTask",
+   "container": "worker",
+   "name": "MarginCalculationTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Расчет маржи",
+   "owner": "Миша",
+   "alias": "t_mar",
+   "status": "base"
+  },
+  {
+   "id": "worker.ReportTask",
+   "container": "worker",
+   "name": "ReportTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Отчеты, счета и акты",
+   "owner": "Миша",
+   "alias": "t_rep",
+   "status": "changed"
+  },
+  {
+   "id": "worker.GatewayReconciliationTask",
+   "container": "worker",
+   "name": "GatewayReconciliationTask",
+   "layer": "Задачи",
+   "tech": "Celery Task",
+   "desc": "Сверка платежей",
+   "owner": "Миша",
+   "alias": "t_rec",
+   "status": "base"
+  },
+  {
+   "id": "worker.ContractService",
+   "container": "worker",
+   "name": "ContractService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Регистрация договора в АИС после оплаты",
+   "owner": "Миша",
+   "alias": "s_con",
+   "status": "changed"
+  },
+  {
+   "id": "worker.DocumentService",
+   "container": "worker",
+   "name": "DocumentService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Сборка PDF, очистка файлов",
+   "owner": "Миша",
+   "alias": "s_doc",
+   "status": "changed"
+  },
+  {
+   "id": "worker.NotificationService",
+   "container": "worker",
+   "name": "NotificationService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Шаблоны писем и вложения",
+   "owner": "Миша",
+   "alias": "s_ntf",
+   "status": "changed"
+  },
+  {
+   "id": "worker.MarginService",
+   "container": "worker",
+   "name": "MarginService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Агрегация, расчет маржи и КВ",
+   "owner": "Миша",
+   "alias": "s_mar",
+   "status": "base"
+  },
+  {
+   "id": "worker.ReportService",
+   "container": "worker",
+   "name": "ReportService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Отчеты по марже, счета и акты",
+   "owner": "Миша",
+   "alias": "s_rep",
+   "status": "changed"
+  },
+  {
+   "id": "worker.ReconciliationService",
+   "container": "worker",
+   "name": "ReconciliationService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Сопоставление поступлений",
+   "owner": "Миша",
+   "alias": "s_rec",
+   "status": "base"
+  },
+  {
+   "id": "worker.AuditService",
+   "container": "worker",
+   "name": "AuditService",
+   "layer": "Сервисы",
+   "tech": "Python",
+   "desc": "Статусы задач и логи",
+   "owner": "Миша",
+   "alias": "s_aud",
+   "status": "base"
+  },
+  {
+   "id": "worker.AisOsagoFacade",
+   "container": "worker",
+   "name": "AisOsagoFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "HTTP Client",
+   "desc": "Регистрация договора, проверка полиса",
+   "owner": "Миша",
+   "alias": "f_ais",
+   "status": "changed"
+  },
+  {
+   "id": "worker.FileRepository",
+   "container": "worker",
+   "name": "FileRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "PyMongo",
+   "desc": "Фото, подписи, PDF",
+   "owner": "Миша",
+   "alias": "r_file",
+   "status": "changed"
+  },
+  {
+   "id": "worker.EmailFacade",
+   "container": "worker",
+   "name": "EmailFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "SMTP Client",
+   "desc": "Полисы, чеки, счета, отчеты, уведомления",
+   "owner": "Миша",
+   "alias": "f_mail",
+   "status": "changed"
+  },
+  {
+   "id": "worker.TariffRepository",
+   "container": "worker",
+   "name": "TariffRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Данные для расчета, результаты маржи",
+   "owner": "Миша",
+   "alias": "r_tar",
+   "status": "changed"
+  },
+  {
+   "id": "worker.TransactionRepository",
+   "container": "worker",
+   "name": "TransactionRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Транзакции, платежи, КВ",
+   "owner": "Миша",
+   "alias": "r_tx",
+   "status": "changed"
+  },
+  {
+   "id": "worker.PaymentGatewayFacade",
+   "container": "worker",
+   "name": "PaymentGatewayFacade",
+   "layer": "Фасады и репозитории",
+   "tech": "HTTP Client",
+   "desc": "Статусы платежей",
+   "owner": "Миша",
+   "alias": "f_pay",
+   "status": "base"
+  },
+  {
+   "id": "worker.AuditRepository",
+   "container": "worker",
+   "name": "AuditRepository",
+   "layer": "Фасады и репозитории",
+   "tech": "SQLAlchemy",
+   "desc": "Outbox, статусы задач, аудит",
+   "owner": "Миша",
+   "alias": "r_aud",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AppRouter",
+   "container": "backoffice",
+   "name": "AppRouter",
+   "layer": "Маршруты",
+   "tech": "React Router",
+   "desc": "Защита страниц по роли: админ, поддержка, ИБ, бухгалтер",
+   "owner": "Амелия",
+   "alias": "rt",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.LoginPage",
+   "container": "backoffice",
+   "name": "LoginPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Вход по одноразовому коду",
+   "owner": "Амелия",
+   "alias": "p_login",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.UsersRolesPage",
+   "container": "backoffice",
+   "name": "UsersRolesPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Пользователи и роли",
+   "owner": "Амелия",
+   "alias": "p_users",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.TariffsPage",
+   "container": "backoffice",
+   "name": "TariffsPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Тарифные сетки и коэффициенты",
+   "owner": "Амелия",
+   "alias": "p_tar",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.TasksPage",
+   "container": "backoffice",
+   "name": "TasksPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Сбойные задачи, перезапуск",
+   "owner": "Амелия",
+   "alias": "p_task",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.PolicySearchPage",
+   "container": "backoffice",
+   "name": "PolicySearchPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Поиск полисов, статусы платежей",
+   "owner": "Амелия",
+   "alias": "p_pol",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AuditLogPage",
+   "container": "backoffice",
+   "name": "AuditLogPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Журнал аудита, расследования",
+   "owner": "Амелия",
+   "alias": "p_aud",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.FinanceDashboard",
+   "container": "backoffice",
+   "name": "FinanceDashboard",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Маржа, оплаты, счета и акты",
+   "owner": "Амелия",
+   "alias": "p_fin",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AuthLogic",
+   "container": "backoffice",
+   "name": "AuthLogic",
+   "layer": "Логика",
+   "tech": "React Context",
+   "desc": "Токен и роль пользователя",
+   "owner": "Амелия",
+   "alias": "l_auth",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AdminLogic",
+   "container": "backoffice",
+   "name": "AdminLogic",
+   "layer": "Логика",
+   "tech": "React Hooks",
+   "desc": "Формы пользователей, ролей и тарифов",
+   "owner": "Амелия",
+   "alias": "l_adm",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.DocumentViewer",
+   "container": "backoffice",
+   "name": "DocumentViewer",
+   "layer": "Логика",
+   "tech": "React Component",
+   "desc": "Просмотр PDF полисов, протоколов и актов",
+   "owner": "Амелия",
+   "alias": "u_view",
+   "status": "changed"
+  },
+  {
+   "id": "backoffice.OperationsLogic",
+   "container": "backoffice",
+   "name": "OperationsLogic",
+   "layer": "Логика",
+   "tech": "React Hooks",
+   "desc": "Задачи, поиск полисов, статусы",
+   "owner": "Амелия",
+   "alias": "l_ops",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.ReportExporter",
+   "container": "backoffice",
+   "name": "ReportExporter",
+   "layer": "Логика",
+   "tech": "SheetJS",
+   "desc": "Выгрузка отчетов и журнала в Excel / CSV",
+   "owner": "Амелия",
+   "alias": "l_exp",
+   "status": "changed"
+  },
+  {
+   "id": "backoffice.AuditLogic",
+   "container": "backoffice",
+   "name": "AuditLogic",
+   "layer": "Логика",
+   "tech": "React Hooks",
+   "desc": "Фильтры журнала, выгрузка",
+   "owner": "Амелия",
+   "alias": "l_aud",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.FinanceLogic",
+   "container": "backoffice",
+   "name": "FinanceLogic",
+   "layer": "Логика",
+   "tech": "React Hooks",
+   "desc": "Дашборд маржи, счета и акты",
+   "owner": "Амелия",
+   "alias": "l_fin",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AuthApiClient",
+   "container": "backoffice",
+   "name": "AuthApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Запрос и проверка кода, токен",
+   "owner": "Амелия",
+   "alias": "a_auth",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AdminApiClient",
+   "container": "backoffice",
+   "name": "AdminApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Пользователи, роли, тарифы",
+   "owner": "Амелия",
+   "alias": "a_adm",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.OperationsApiClient",
+   "container": "backoffice",
+   "name": "OperationsApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Задачи, полисы, платежи",
+   "owner": "Амелия",
+   "alias": "a_ops",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.AuditApiClient",
+   "container": "backoffice",
+   "name": "AuditApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Журнал аудита",
+   "owner": "Амелия",
+   "alias": "a_aud",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.FinanceApiClient",
+   "container": "backoffice",
+   "name": "FinanceApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Маржа, оплаты, счета и акты",
+   "owner": "Амелия",
+   "alias": "a_fin",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.HttpClient",
+   "container": "backoffice",
+   "name": "HttpClient",
+   "layer": "HTTP",
+   "tech": "axios",
+   "desc": "Токен в каждом запросе, 401/403, повторы",
+   "owner": "Амелия",
+   "alias": "http",
+   "status": "base"
+  },
+  {
+   "id": "backoffice.NotificationCenter",
+   "container": "backoffice",
+   "name": "NotificationCenter",
+   "layer": "HTTP",
+   "tech": "React Component",
+   "desc": "Уведомления об ошибках и результатах операций",
+   "owner": "Амелия",
+   "alias": "u_note",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.AppRouter",
+   "container": "webapp",
+   "name": "AppRouter",
+   "layer": "Маршруты",
+   "tech": "React Router",
+   "desc": "Защита страниц по роли: гость, клиент, агент, менеджер, диспетчер, эксперт",
+   "owner": "Никита",
+   "alias": "rt",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.CalculatorPage",
+   "container": "webapp",
+   "name": "CalculatorPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Расчет стоимости (в т.ч. для гостя)",
+   "owner": "Никита",
+   "alias": "p_calc",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.CheckoutPage",
+   "container": "webapp",
+   "name": "CheckoutPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Оформление и оплата полиса",
+   "owner": "Никита",
+   "alias": "p_buy",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.CabinetPage",
+   "container": "webapp",
+   "name": "CabinetPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Личный кабинет, скачивание полиса",
+   "owner": "Никита",
+   "alias": "p_cab",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.AgentWorkplace",
+   "container": "webapp",
+   "name": "AgentWorkplace",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Оформление полисов и договоров агентом",
+   "owner": "Никита",
+   "alias": "p_agent",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.ManagerWorkplace",
+   "container": "webapp",
+   "name": "ManagerWorkplace",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Отчеты, агенты, сложные случаи",
+   "owner": "Никита",
+   "alias": "p_mgr",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.AccidentPage",
+   "container": "webapp",
+   "name": "AccidentPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Регистрация заявления о ДТП",
+   "owner": "Никита",
+   "alias": "p_acc",
+   "status": "base"
+  },
+  {
+   "id": "webapp.DispatcherPage",
+   "container": "webapp",
+   "name": "DispatcherPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Заявление по звонку, назначение эксперта",
+   "owner": "Никита",
+   "alias": "p_disp",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.ExpertDashboard",
+   "container": "webapp",
+   "name": "ExpertDashboard",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Назначенные эксперту дела",
+   "owner": "Никита",
+   "alias": "p_exp",
+   "status": "base"
+  },
+  {
+   "id": "webapp.InspectionPage",
+   "container": "webapp",
+   "name": "InspectionPage",
+   "layer": "Страницы",
+   "tech": "React Page",
+   "desc": "Осмотр, фото, подписание акта",
+   "owner": "Никита",
+   "alias": "p_insp",
+   "status": "base"
+  },
+  {
+   "id": "webapp.AuthLogic",
+   "container": "webapp",
+   "name": "AuthLogic",
+   "layer": "Логика и UI",
+   "tech": "React Context",
+   "desc": "Токен и роль пользователя",
+   "owner": "Никита",
+   "alias": "l_auth",
+   "status": "base"
+  },
+  {
+   "id": "webapp.PolicyLogic",
+   "container": "webapp",
+   "name": "PolicyLogic",
+   "layer": "Логика и UI",
+   "tech": "React Hooks",
+   "desc": "Расчет, оформление, полисы и отчеты",
+   "owner": "Никита",
+   "alias": "l_pol",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.FormWizard",
+   "container": "webapp",
+   "name": "FormWizard",
+   "layer": "Логика и UI",
+   "tech": "React Component",
+   "desc": "Пошаговая форма ввода данных ДТП",
+   "owner": "Никита",
+   "alias": "u_form",
+   "status": "base"
+  },
+  {
+   "id": "webapp.AccidentLogic",
+   "container": "webapp",
+   "name": "AccidentLogic",
+   "layer": "Логика и UI",
+   "tech": "React Hooks",
+   "desc": "Черновик заявления, валидация полей",
+   "owner": "Никита",
+   "alias": "l_acc",
+   "status": "base"
+  },
+  {
+   "id": "webapp.PhotoUploader",
+   "container": "webapp",
+   "name": "PhotoUploader",
+   "layer": "Логика и UI",
+   "tech": "React Component",
+   "desc": "Превью; проверка формата и размера",
+   "owner": "Никита",
+   "alias": "u_photo",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.ExpertCasesLogic",
+   "container": "webapp",
+   "name": "ExpertCasesLogic",
+   "layer": "Логика и UI",
+   "tech": "React Hooks",
+   "desc": "Список дел, фильтры, статусы",
+   "owner": "Никита",
+   "alias": "l_exp",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.InspectionLogic",
+   "container": "webapp",
+   "name": "InspectionLogic",
+   "layer": "Логика и UI",
+   "tech": "React Hooks",
+   "desc": "Сбор результатов; оценка ущерба по категории",
+   "owner": "Никита",
+   "alias": "l_insp",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.SignaturePad",
+   "container": "webapp",
+   "name": "SignaturePad",
+   "layer": "Логика и UI",
+   "tech": "React Component",
+   "desc": "Канвас для электронной подписи",
+   "owner": "Никита",
+   "alias": "u_sig",
+   "status": "base"
+  },
+  {
+   "id": "webapp.AuthApiClient",
+   "container": "webapp",
+   "name": "AuthApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Вход по коду, обновление токена",
+   "owner": "Никита",
+   "alias": "a_auth",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.PolicyApiClient",
+   "container": "webapp",
+   "name": "PolicyApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Расчет, оформление, оплата, PDF полиса",
+   "owner": "Никита",
+   "alias": "a_pol",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.AccidentApiClient",
+   "container": "webapp",
+   "name": "AccidentApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Заявления, статусы, назначение, дела",
+   "owner": "Никита",
+   "alias": "a_acc",
+   "status": "changed"
+  },
+  {
+   "id": "webapp.InspectionApiClient",
+   "container": "webapp",
+   "name": "InspectionApiClient",
+   "layer": "API-клиенты",
+   "tech": "TypeScript",
+   "desc": "Фото, результаты, подпись",
+   "owner": "Никита",
+   "alias": "a_insp",
+   "status": "base"
+  },
+  {
+   "id": "webapp.HttpClient",
+   "container": "webapp",
+   "name": "HttpClient",
+   "layer": "HTTP",
+   "tech": "axios",
+   "desc": "Токен в каждом запросе, 401/403, повторы",
+   "owner": "Никита",
+   "alias": "http",
+   "status": "changed"
+  }
+ ]
+}
