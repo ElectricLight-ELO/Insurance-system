@@ -5,7 +5,6 @@ LAYOUT_LEFT_RIGHT()
 title ИС ОСАГО, фин. контроль и маржа. Динамическая диаграмма — расчет маржи, КВ и сверка платежей
 
 Person(accountant, "Бухгалтер", "Ведет финансовый учет,\nконтролирует маржинальность", $tags="staff")
-Person(auditor, "Финансовый аудитор", "Анализирует потоки,\nпроверяет результаты сверки", $tags="staff")
 
 Container(web_app, "Web App", "React SPA", "Рабочее место бухгалтера\nи финансового менеджера,\nуправление отчетами")
 
@@ -22,7 +21,6 @@ Container_Boundary(api, "API (FastAPI)") {
 
 ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции,\nсобытия аудита, очередь задач (outbox)")
 ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
-ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты\nи PDF-документы")
 
 Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nрасчет маржи, периодическая сверка,\nгенерация отчетов")
 
