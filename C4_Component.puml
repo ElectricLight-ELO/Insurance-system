@@ -1,3 +1,0 @@
-' Обёртка тимлида: библиотека C4-PlantUML (stdlib) + единые стили проекта
-!include <C4/C4_Component>
-!include styles.puml
