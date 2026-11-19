@@ -1,4 +1,0 @@
-architecture/**/*.puml text eol=lf
-architecture/**/*.csv text eol=lf
-architecture/**/*.sh text eol=lf
-.github/**/*.yml text eol=lf
