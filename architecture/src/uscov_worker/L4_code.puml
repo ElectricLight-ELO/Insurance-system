@@ -1,25 +1,41 @@
 @startuml
 !include ../core/class_style.puml
 
-title ИС ОСАГО, фин. контроль и маржа. UML CLASS DIAGRAM — компонент "API (FastAPI)"
+title ИС ОСАГО, фин. контроль и маржа. UML CLASS DIAGRAM — компонент "Worker (Python / Celery)"
 
 ' =====================================================
-' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
+' СЛОЙ ФОНОВЫХ ЗАДАЧ: CELERY TASKS & OUTBOX CONSUMER
 ' =====================================================
-package "Слой API: контроллеры (FastAPI Router)" {
+package "Слой фоновых задач (Celery Tasks)" {
 
-    class MarginController {
-- _service: IMarginService
-        + __init__(service: IMarginService) -> None
-        + trigger_margin(request: MarginCalculationRequest) -> MarginResult
-        + get_margin_status(period_id: UUID) -> MarginStatus
+    class OutboxPoller {
+        - _repo: IAuditRepository
+        - _margin_task: MarginCalcTask
+        - _recon_task: PaymentReconcileTask
+        - _report_task: ReportGeneratorTask
+        + __init__(repo: IAuditRepository, margin_task: MarginCalcTask, recon_task: PaymentReconcileTask, report_task: ReportGeneratorTask) -> None
+        + poll_pending_tasks(batch_size: int) -> list[TaskItem]
+        + dispatch(task: TaskItem) -> None
     }
 
-    class ReconciliationController {
-- _service: IReconciliationService
+    class MarginCalcTask {
+        - _service: IMarginService
+        + __init__(service: IMarginService) -> None
+        + run_margin_calculation(task_id: UUID, period: str) -> MarginResult
+    }
+
+    class PaymentReconcileTask {
+        - _service: IReconciliationService
         + __init__(service: IReconciliationService) -> None
-        + trigger_reconciliation() -> ReconciliationReport
-        + get_pending_transactions() -> list[Transaction]
+        + run_reconciliation(task_id: UUID) -> ReconciliationReport
+    }
+
+    class ReportGeneratorTask {
+        - _audit_repo: IAuditRepository
+        - _files_repo: IFileRepository
+        - _audit: AuditService
+        + __init__(audit_repo: IAuditRepository, files_repo: IFileRepository, audit: AuditService) -> None
+        + build_financial_report(task_id: UUID, period: str) -> UUID
     }
 }
 
@@ -34,14 +50,14 @@ package "Слой бизнес-логики: сервисы" {
     }
 
     class MarginService {
-- _audit_repo: IAuditRepository
-- _tariff_repo: ITariffRepository
-- _audit: AuditService
-- _commission_strategy: CommissionStrategy
+        - _audit_repo: IAuditRepository
+        - _tariff_repo: ITariffRepository
+        - _audit: AuditService
+        - _commission_strategy: CommissionStrategy
         + __init__(audit_repo: IAuditRepository, tariff_repo: ITariffRepository, audit: AuditService, commission_strategy: CommissionStrategy) -> None
         + calculate_period_margin(period: str) -> MarginResult
         + calculate_agent_commission(agent_id: UUID) -> float
-- _audit_event(actor: str, action: str, entity_id: UUID) -> None
+        - _audit_event(actor: str, action: str, entity_id: UUID) -> None
     }
 
     interface IReconciliationService {
@@ -50,19 +66,18 @@ package "Слой бизнес-логики: сервисы" {
     }
 
     class ReconciliationService {
-- _audit_repo: IAuditRepository
-- _files: IFileRepository
-- _audit: AuditService
-- _tasks: TaskQueueFacade
-- _bank: PaymentGatewayFacade
-        + __init__(audit_repo: IAuditRepository, files: IFileRepository, audit: AuditService, tasks: TaskQueueFacade, bank: PaymentGatewayFacade) -> None
+        - _audit_repo: IAuditRepository
+        - _files: IFileRepository
+        - _audit: AuditService
+        - _bank: PaymentGatewayFacade
+        + __init__(audit_repo: IAuditRepository, files: IFileRepository, audit: AuditService, bank: PaymentGatewayFacade) -> None
         + reconcile_payments() -> ReconciliationReport
         + check_pending_payment(transaction_id: UUID) -> PaymentStatus
-- _audit_event(actor: str, action: str, entity_id: UUID) -> None
+        - _audit_event(actor: str, action: str, entity_id: UUID) -> None
     }
 
     class AuditService {
-- _repo: IAuditRepository
+        - _repo: IAuditRepository
         + __init__(repo: IAuditRepository) -> None
         + log(event: AuditEvent) -> None
     }
@@ -87,18 +102,12 @@ package "Strategy: алгоритмы расчета КВ" {
 }
 
 ' =====================================================
-' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ
+' СЛОЙ ИНТЕГРАЦИИ: ВНЕШНИЕ КЛИЕНТЫ
 ' =====================================================
-package "Слой интеграции: фасады" {
-
-    class TaskQueueFacade {
-- _session: Session
-        + __init__(session: Session) -> None
-        + enqueue(task: TaskItem) -> UUID
-    }
+package "Слой интеграции: внешние шлюзы" {
 
     class PaymentGatewayFacade {
-- _http: HTTPClient
+        - _http: HTTPClient
         + __init__(http: HTTPClient) -> None
         + check_transaction_status(transaction_id: UUID) -> str
     }
@@ -112,14 +121,16 @@ package "Слой данных: репозитории" {
     interface IAuditRepository {
         + get_transaction(tx_id: UUID) -> Transaction | None
         + list_pending_transactions() -> list[Transaction]
+        + mark_task_done(task_id: UUID) -> None
         + save_audit(event: AuditEvent) -> AuditEvent
         + save_task(task: TaskItem) -> UUID
     }
 
     class AuditRepository {
-- _session: Session
+        - _session: Session
         + get_transaction(tx_id: UUID) -> Transaction | None
         + list_pending_transactions() -> list[Transaction]
+        + mark_task_done(task_id: UUID) -> None
         + save_audit(event: AuditEvent) -> AuditEvent
         + save_task(task: TaskItem) -> UUID
     }
@@ -130,7 +141,7 @@ package "Слой данных: репозитории" {
     }
 
     class TariffRepository {
-- _session: Session
+        - _session: Session
         + get_tariff(region: str) -> Tariff | None
         + list_tariffs() -> list[Tariff]
     }
@@ -141,8 +152,8 @@ package "Слой данных: репозитории" {
     }
 
     class FileRepository {
-- _db: Database
-- _fs: GridFS
+        - _db: Database
+        - _fs: GridFS
         + save_pdf(report_id: UUID, content: bytes) -> UUID
         + get_pdf(report_id: UUID) -> bytes | None
     }
@@ -161,46 +172,47 @@ package "Домен: сущности и перечисления" {
 
     enum TaskType {
         MARGIN_CALC
+        PAYMENT_RECONCILE
         PDF_REPORT
     }
 
     class Transaction {
-- transaction_id: UUID
-- policy_number: str
-- amount: float
-- commission_kv: float
-- status: TransactionStatus
-- created_at: datetime
+        - transaction_id: UUID
+        - policy_number: str
+        - amount: float
+        - commission_kv: float
+        - status: TransactionStatus
+        - created_at: datetime
         + update_status(status: TransactionStatus) -> None
     }
 
     class Tariff {
-- tariff_id: UUID
-- region: str
-- base_rate: float
-- kv_rate: float
+        - tariff_id: UUID
+        - region: str
+        - base_rate: float
+        - kv_rate: float
     }
 
     class MarginResult {
-- period: str
-- total_premium: float
-- total_kv: float
-- net_margin: float
+        - period: str
+        - total_premium: float
+        - total_kv: float
+        - net_margin: float
     }
 
     class AuditEvent {
-- event_id: UUID
-- actor: str
-- action: str
-- entity_id: UUID
-- occurred_at: datetime
+        - event_id: UUID
+        - actor: str
+        - action: str
+        - entity_id: UUID
+        - occurred_at: datetime
     }
 
     class TaskItem {
-- task_id: UUID
-- type: TaskType
-- reference_id: UUID
-- created_at: datetime
+        - task_id: UUID
+        - type: TaskType
+        - reference_id: UUID
+        - created_at: datetime
     }
 }
 
@@ -216,10 +228,18 @@ StandardCommissionStrategy ..|> CommissionStrategy
 PremiumCommissionStrategy ..|> CommissionStrategy
 
 ' =====================================================
-' СВЯЗИ: ВНЕДРЕНИЕ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' СВЯЗИ: ВНЕДРЕНИЕ ЗАВИСИМОСТЕЙ И ВЫЗОВЫ В WORKER
 ' =====================================================
-MarginController ..> IMarginService : "DI"
-ReconciliationController ..> IReconciliationService : "DI"
+OutboxPoller ..> IAuditRepository : "DI"
+OutboxPoller ..> MarginCalcTask : "dispatches"
+OutboxPoller ..> PaymentReconcileTask : "dispatches"
+OutboxPoller ..> ReportGeneratorTask : "dispatches"
+
+MarginCalcTask ..> IMarginService : "DI"
+PaymentReconcileTask ..> IReconciliationService : "DI"
+ReportGeneratorTask ..> IAuditRepository : "DI"
+ReportGeneratorTask ..> IFileRepository : "DI"
+ReportGeneratorTask ..> AuditService : "DI"
 
 MarginService ..> IAuditRepository : "DI"
 MarginService ..> ITariffRepository : "DI"
@@ -229,24 +249,23 @@ MarginService o--> CommissionStrategy : "агрегация, DI,\nподмена
 ReconciliationService ..> IAuditRepository : "DI"
 ReconciliationService ..> IFileRepository : "DI"
 ReconciliationService ..> AuditService : "DI"
-ReconciliationService ..> TaskQueueFacade : "DI"
 ReconciliationService ..> PaymentGatewayFacade : "DI"
 
 AuditService ..> IAuditRepository : "DI"
 
 ' =====================================================
-' СВЯЗИ: СЕРВИСЫ -> ДОМЕН (создание / использование)
+' СВЯЗИ: ЗАДАЧИ И СЕРВИСЫ -> ДОМЕН
 ' =====================================================
 MarginService ..> MarginResult : "creates"
 MarginService ..> AuditEvent : "creates"
 ReconciliationService ..> AuditEvent : "creates"
-ReconciliationService ..> TaskItem : "enqueues"
+ReportGeneratorTask ..> AuditEvent : "creates"
 AuditService ..> AuditEvent : "uses"
 
 ' =====================================================
-' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
+' СВЯЗИ: КЛИЕНТЫ И РЕПОЗИТОРИИ -> ДОМЕН
 ' =====================================================
-TaskQueueFacade ..> TaskItem
+OutboxPoller ..> TaskItem : "reads"
 PaymentGatewayFacade ..> Transaction
 AuditRepository ..> Transaction
 AuditRepository ..> AuditEvent
