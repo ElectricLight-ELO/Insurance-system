@@ -1,0 +1,64 @@
+@startuml
+skinparam dpi 120
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam rectangle {
+  BorderColor black
+  BorderThickness 2
+  FontStyle bold
+  BackgroundColor white
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+  ArrowColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam nodesep 18
+skinparam ranksep 90
+left to right direction
+actor "Бухгалтер" as B
+actor "Оператор\nподдержки" as S
+actor "Сотрудник ИБ" as I
+actor "Администратор" as AD
+actor "Платёжная\nсистема" as PS
+actor "E-mail\nсистема" as EM
+rectangle "ИС ОСАГО: финансы, поддержка и администрирование (как должно быть)" {
+  usecase "Контролировать статусы оплат\nи зависшие платежи" as U1 #C5E0B3
+  usecase "Рассчитать маржу и КВ,\nпоказать на дашборде" as U2 #C5E0B3
+  usecase "Сформировать счета,\nакты и отчёты автоматически" as U3 #C5E0B3
+  usecase "Разослать счета, акты\nи отчёты по e-mail" as U4 #BDD7EE
+  usecase "Подписать отчёты" as U5
+  usecase "Найти полис и платёж\nв единой базе" as U6 #C5E0B3
+  usecase "Перезапустить задачу,\nисчерпавшую попытки" as U7 #C5E0B3
+  usecase "Расследовать инцидент" as U8 #C5E0B3
+  usecase "Просмотреть журнал аудита" as U9 #C5E0B3
+  usecase "Управлять пользователями\nи ролями (RBAC)" as U10 #C5E0B3
+  usecase "Управлять тарифами\nи коэффициентами" as U11 #C5E0B3
+}
+B -- U1
+B -- U2
+B -- U3
+B -- U5
+S -- U6
+S -- U7
+I -- U8
+AD -- U7
+AD -- U9
+AD -- U10
+AD -- U11
+U3 ..> U4 : <<include>>
+U8 ..> U9 : <<include>>
+U1 --> PS
+U4 --> EM
+legend left
+  <back:#C5E0B3>  зелёный  </back> прецеденты, устраняющие проблемы модели «как есть» (п. 2.2.4)
+  <back:#BDD7EE>  голубой  </back> новые возможности, отсутствовавшие в модели «как есть»
+  белый — неизменяемые части
+endlegend
+@enduml

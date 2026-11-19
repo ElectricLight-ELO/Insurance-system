@@ -1,0 +1,60 @@
+@startuml
+!include ../core/C4_Deployment.puml
+
+title ИС ОСАГО, фиксация ДТП. Deployment — локальный сегмент модуля аварийного эксперта (Киселев Д.А.)
+
+LAYOUT_TOP_DOWN()
+
+Deployment_Node(workstation, "Рабочие места диспетчера, эксперта и клиента", "ПК / ноутбук, веб-браузер") {
+    Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера и эксперта,\nэлектронная подпись клиента")
+}
+
+Deployment_Node(server, "Корпоративный сервер (on-prem)", "Docker host, Linux, 16 CPU / 32 GB") {
+    Deployment_Node(net, "Изолированная docker-сеть 172.20.0.0/16 (bridge)") {
+
+        Deployment_Node(nginx_node, "Nginx Reverse Proxy", "Nginx", "Единственная точка входа :443/TCP, TLS 1.2+, HSTS;\nраздача статического бандла Web App,\nбалансировка round-robin с health check")
+
+        Deployment_Node(api_cluster, "Кластер API, 2 реплики", "Docker-контейнеры, :8000/TCP") {
+            Container(api, "API", "FastAPI", "REST/HTTPS JSON — регистрация заявлений,\nназначение эксперта, осмотр, проверка полиса ОСАГО,\nвыдача PDF-протокола")
+        }
+
+        Deployment_Node(worker_cluster, "Узлы Worker, 2 инстанса", "Docker-контейнеры") {
+            Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nгенерация PDF-протокола, рассылка")
+        }
+
+        Deployment_Node(pg_primary, "Сервер PostgreSQL (primary)", "PostgreSQL") {
+            ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права доступа (RBAC)")
+            ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, аудит,\nочередь задач (outbox)")
+        }
+
+        Deployment_Node(pg_replica, "Сервер PostgreSQL (replica)", "PostgreSQL, hot standby, только чтение")
+
+        Deployment_Node(mongo_primary, "Сервер MongoDB (primary)", "MongoDB, набор реплик") {
+            ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи,\nPDF-протоколы осмотра")
+        }
+
+        Deployment_Node(mongo_secondary, "Серверы MongoDB (secondary), 2 экземпляра", "MongoDB, набор реплик")
+    }
+}
+
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договоре", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Доставка протоколов осмотра\nи уведомлений", $tags="ext")
+
+Rel(workstation, nginx_node, "Загружает приложение, отправляет заявления,\nрезультаты осмотра, фото и подпись", "HTTPS, TCP 443, TLS 1.2+, HSTS")
+Rel(nginx_node, api, "Reverse proxy: распределяет запросы\nмежду репликами API (round-robin)", "HTTP, TCP 8000")
+
+Rel(api, db_users, "Аутентификация, роли диспетчера,\nэксперта и клиента", "SQL, TCP 5432, TLS")
+Rel(api, db_audit, "Запись заявлений, осмотра, аудита,\nзадач в outbox", "SQL, TCP 5432, TLS")
+Rel(api, db_files, "Сохранение фото и подписей,\nвыдача PDF-протокола", "MongoDB, TCP 27017, TLS")
+
+Rel(worker, db_audit, "Опрос очереди outbox\nи обновление статусов", "SQL, TCP 5432, TLS")
+Rel(worker, db_files, "Чтение фото и подписей,\nзапись PDF-протоколов", "MongoDB, TCP 27017, TLS")
+
+Rel(pg_primary, pg_replica, "Потоковая репликация (hot standby)", "SQL, TCP 5432, TLS")
+Rel(mongo_primary, mongo_secondary, "Репликация набора реплик", "MongoDB, TCP 27017, TLS")
+
+Rel(api, ais_osago, "Проверка наличия полиса ОСАГО\nпри регистрации заявления", "HTTPS, mTLS, TCP 443")
+Rel(worker, email_sys, "Отправка протокола осмотра\nи уведомлений", "SMTPS, TCP 465 / STARTTLS, TCP 587")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,76 @@
+# ИС ОСАГО — Lab 5: Diagrams-as-Code. Валидация и рендер C4-диаграмм.
+# Ответственный: тимлид Таган А.М. (DevOps / релиз-инженер)
+name: Auto Render C4 Architecture Docs
+
+on:
+  push:
+    branches: [ main, emergency_expert_dima ]
+    paths: [ 'architecture/**', '.github/workflows/render-docs.yml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'architecture/**', '.github/workflows/render-docs.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLANTUML_VERSION: "1.2024.7"
+
+jobs:
+  validate-and-render:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash   # bash -eo pipefail: ошибка скрипта не теряется за tee
+        working-directory: architecture
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Setup Java Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Graphviz Engine and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz fonts-liberation
+
+      - name: Download PlantUML Jar Executable
+        run: |
+          wget -q https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar -O plantuml.jar
+          java -jar plantuml.jar -version | head -1
+
+      - name: Check coding standards and Glossary IDs (Rel_D/Lay_/skinparam/protocols/IDs)
+        run: |
+          mkdir -p docs
+          python3 scripts/check_rules.py 2>&1 | tee docs/ci_rules.log
+
+      - name: Validate Syntax and Compile Diagrams to PNG/SVG
+        run: bash scripts/render.sh plantuml.jar 2>&1 | tee docs/ci_render.log
+
+      - name: Build interactive architecture map
+        run: python3 scripts/build_index.py
+
+      - name: Upload artifacts (images + build logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c4-architecture-docs
+          path: |
+            architecture/docs/images
+            architecture/docs/index.html
+            architecture/docs/*.log
+
+      - name: Commit and Push Rendered Artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true   # если main защищена от push бота — артефакты остаются в Upload artifacts
+        run: |
+          git config --global user.name 'DevOps Bot'
+          git config --global user.email 'devops-bot@users.noreply.github.com'
+          git add docs/images docs/index.html docs/*.log
+          git commit -m 'docs: auto-update architecture diagrams [skip ci]' || echo 'No changes to commit'
+          git push

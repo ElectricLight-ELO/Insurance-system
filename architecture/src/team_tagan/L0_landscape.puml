@@ -1,0 +1,43 @@
+@startuml
+!include ../core/C4_Context.puml
+LAYOUT_TOP_DOWN()
+title ИС ОСАГО. SYSTEM LANDSCAPE (L0) — интеграция в экосистему Smart City (тимлид)
+
+Person(citizen, "Граждане и клиенты", "Гость, клиент, застрахованный клиент (3 роли L1)")
+Person(front_staff, "Сотрудники фронт-офиса", "Страховой агент, менеджер продаж, диспетчер, аварийный эксперт (4 роли L1)")
+Person(back_staff, "Сотрудники бэк-офиса", "Оператор поддержки, сотрудник ИБ, бухгалтер, администратор (4 роли L1)")
+
+Boundary(city, "Экосистема Smart City") {
+  Enterprise_Boundary(enterprise, "Корпоративная ИТ-инфраструктура страховой компании") {
+    System(osago, "ИС ОСАГО", "Продажа и оформление полисов, оплата, регистрация договоров, фиксация ДТП и осмотр, финансовый контроль, администрирование и аудит", $tags="target")
+    System(iam, "Служба авторизации (IAM)", "Единые учётные записи сотрудников, SSO, роли, выпуск и проверка токенов")
+    System(crm, "CRM страховой компании", "Карточки клиентов, лиды и продажи агентов, история обращений")
+    System(email_sys, "E-mail система", "Корпоративная почта и рассылки")
+    System(sms_sys, "SMS-шлюз", "Одноразовые коды")
+  }
+  System_Ext(city_portal, "Городской портал услуг", "Единая точка доступа граждан к городским сервисам", $tags="city")
+  System_Ext(esia, "ЕСИА (Госуслуги)", "Подтверждённая учётная запись гражданина", $tags="city")
+  System_Ext(sitc, "Ситуационный центр / Система-112", "Приём сообщений о ДТП, вызов служб", $tags="city")
+  System_Ext(soc, "Городской центр мониторинга ИБ (SOC)", "Инциденты ИБ городских систем", $tags="city")
+}
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверки ТС, водителей и полиса, регистрация договоров", $tags="ext")
+System_Ext(payment_sys, "Платёжная система", "Платёжные сессии, webhook, сверка", $tags="ext")
+
+Rel(citizen, osago, "Расчёт и оформление полиса, личный кабинет, заявление о ДТП, подпись протокола", "HTTPS")
+Rel(front_staff, osago, "Продажи и КВ, отчёты, заявления о ДТП, осмотр и фото", "HTTPS")
+Rel(back_staff, osago, "Администрирование, задачи, журнал аудита, финансы", "HTTPS через VPN")
+Rel(citizen, payment_sys, "Оплачивает полис", "HTTPS")
+Rel(osago, iam, "Вход сотрудников (SSO), роли, проверка токенов", "HTTPS, OAuth2 / OIDC")
+Rel(osago, crm, "Клиенты, продажи агентов, обращения в поддержку", "HTTPS, JSON", $tags="async")
+Rel(osago, sms_sys, "Одноразовые коды", "HTTPS, JSON")
+Rel(osago, email_sys, "Полисы, чеки, протоколы, счета, отчёты", "SMTP / STARTTLS", $tags="async")
+Rel(email_sys, citizen, "Доставляет документы", "E-mail", $tags="async")
+Rel(osago, ais_osago, "КБМ, проверки, регистрация договора", "HTTPS, JSON, mTLS")
+Rel(osago, payment_sys, "Платёжная сессия, сверка", "HTTPS, JSON")
+Rel(payment_sys, osago, "Уведомление об оплате (webhook)", "HTTPS, JSON", $tags="async")
+Rel(city_portal, osago, "Переход гражданина к расчёту и оформлению полиса", "HTTPS")
+Rel(osago, esia, "Вход гражданина через Госуслуги", "HTTPS, OAuth2 / OIDC")
+Rel(sitc, osago, "Сообщение о ДТП с координатами (создание черновика заявления)", "HTTPS, JSON", $tags="async")
+Rel(osago, soc, "События ИБ из журнала аудита", "HTTPS, JSON (syslog/CEF)", $tags="async")
+SHOW_LEGEND()
+@enduml
