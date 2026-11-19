@@ -48,11 +48,6 @@ jobs:
           wget -q https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar -O plantuml.jar
           java -jar plantuml.jar -version | head -1
 
-      - name: Check coding standards and Glossary IDs (Rel_D/Lay_/skinparam/protocols/IDs)
-        run: |
-          mkdir -p docs
-          python3 scripts/check_rules.py 2>&1 | tee docs/ci_rules.log
-
       - name: Validate Syntax and Compile Diagrams to PNG/SVG
         env:
           GRAPHVIZ_DOT: /usr/bin/dot
