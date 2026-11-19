@@ -1,0 +1,55 @@
+@startuml
+!include ../core/C4_Container.puml
+
+title Информационная система оформления ОСАГО (ИС ОСАГО). Container
+
+Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="outsider")
+Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
+Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
+
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+
+    Container(web_app, "Web App", "React SPA", "Расчет, оформление, оплата,\nличный кабинет клиента")
+
+    Container(backoffice, "Backoffice", "React SPA", "Поиск полисов, статусы платежей,\nручной перезапуск задач")
+
+    Container(api, "API", "FastAPI", "Расчет премии, оформление, оплата,\nавторизация, ролевой доступ,\nвыдача PDF полиса")
+
+    ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права доступа (RBAC),\nклиенты, номера полисов")
+
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Журнал событий аудита, транзакции, платежи,\nочередь асинхронных задач (outbox)")
+
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото, подписи и файлы документов\n(PDF полисов)")
+
+    Container(worker, "Worker", "Python", "Фоновая обработка: PDF, регистрация\nдоговора, отправка писем, сверка платежей")
+}
+
+System_Ext(payment_sys, "Платежная система", "Проведение платежей", $tags="ext")
+System_Ext(email_sys, "E-mail сервис", "Почтовый сервис рассылки", $tags="ext")
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей,\nрегистрация договоров", $tags="ext")
+System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="ext")
+
+Rel(guest, web_app, "Рассчитывает стоимость\nбез регистрации", "HTTPS")
+Rel(client, web_app, "Вводит данные, загружает фото,\nоплачивает, скачивает полис", "HTTPS")
+Rel(support, backoffice, "Ищет полисы, смотрит статусы,\nперезапускает задачи", "HTTPS")
+
+Rel(web_app, api, "Расчет, оформление, оплата,\nскачивание полиса", "REST/HTTPS, JSON")
+Rel(backoffice, api, "Поиск полисов,\nуправление задачами", "REST/HTTPS, JSON")
+
+Rel(api, db_users, "Читает и записывает данные клиентов,\nролей и полисов", "SQL")
+Rel(api, db_audit, "Записывает события аудита и транзакции,\nставит задачи в outbox (с полным payload)", "SQL")
+Rel(api, db_files, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "MongoDB driver")
+
+Rel(api, sms_sys, "Отправляет одноразовый код\nдля авторизации клиента", "HTTPS, JSON")
+Rel(api, payment_sys, "Создает платежную сессию", "HTTPS, JSON")
+Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
+Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
+
+Rel(worker, db_audit, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы,\nсверяет оплаты без задач", "SQL")
+Rel(worker, db_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
+
+Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="async")
+Rel(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="async")
+Rel(worker, email_sys, "Отправляет клиенту письмо со ссылкой\nна полис и чек (повтор при сбое)", "SMTP / HTTPS", $tags="async")
+
+@enduml
