@@ -1,0 +1,37 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+}
+actor "Клиент" as C
+actor "Диспетчер\nколл-центра" as D
+actor "Аварийный\nэксперт" as E
+rectangle "Страховая компания: урегулирование ДТП (как есть)" {
+  usecase "Сообщить о ДТП\nпо телефону" as U1
+  usecase "Узнать статус дела\nпо телефону" as U2 #FAD7B5
+  usecase "Подписать бумажный\nпротокол осмотра" as U3 #FAD7B5
+  usecase "Записать заявление\nв журнал" as U4 #FAD7B5
+  usecase "Проверить полис участника\nотдельным запросом" as U5 #FAD7B5
+  usecase "Назначить эксперта\nпо телефону" as U6
+  usecase "Сообщать клиенту\nо статусе дела" as U6b #FAD7B5
+  usecase "Провести осмотр ТС\nна месте ДТП" as U8
+  usecase "Заполнить бумажный\nакт осмотра" as U9 #FAD7B5
+  usecase "Передать фото вне\nединой базы (почта, флешка)" as U10 #FAD7B5
+  usecase "Составить протокол\nосмотра вручную" as U11 #FAD7B5
+}
+actor "АИС ОСАГО\n(веб-кабинет)" as AIS
+C -- U1
+C -- U2
+C -- U3
+D -- U4
+D -- U6
+D -- U6b
+E -- U8
+E -- U9
+E -- U10
+U5 -- AIS
+U4 ..> U5 : <<include>>
+U9 ..> U11 : <<include>>
+@enduml

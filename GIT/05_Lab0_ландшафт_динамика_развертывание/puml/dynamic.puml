@@ -1,0 +1,89 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Информационная система оформления ОСАГО (ИС ОСАГО). Dynamic: подписание протокола осмотра и доставка клиенту
+
+LAYOUT_TOP_DOWN()
+
+Person(client, "Клиент", "Участник ДТП (страхователь или потерпевший):\nподает заявку, загружает фото,\nставит подпись на протоколе осмотра")
+
+Container_Boundary(web_app, "Web App (React SPA)") {
+    Component(p_insp, "InspectionPage", "React Page", "Осмотр, фото,\nподписание акта")
+    Component(u_sig, "SignaturePad", "React Component", "Канвас для\nэлектронной подписи")
+    Component(l_insp, "InspectionLogic", "React Hooks", "Сбор результатов;\nвыплату не считает")
+    Component(a_insp, "InspectionApiClient", "TypeScript", "Фото, результаты,\nподпись")
+    Component(http, "HttpClient", "axios", "Токен в каждом запросе,\n401/403, повторы")
+    Component(l_auth, "AuthLogic", "React Context", "Токен и роль\nпользователя")
+}
+
+Container_Boundary(api, "API (FastAPI)") {
+    Component(c_insp, "InspectionController", "FastAPI Router", "Результаты осмотра,\nфото, подпись")
+    Component(acc, "AccessService", "Python · Strategy", "Выпуск токена и\nпроверка прав (RBAC)")
+    Component(s_insp, "InspectionService", "Python", "Акт осмотра, подпись,\nзадача на PDF")
+    Component(r_file, "FileRepository", "PyMongo", "Фото, подписи,\nPDF")
+    Component(f_task, "TaskQueueFacade", "SQL Client", "Задачи в очередь\nдля Worker")
+    Component(aud, "AuditService", "Python", "Запись событий аудита\nпо каждому действию")
+    Component(r_acc, "AccidentRepository", "SQLAlchemy", "Заявления, акты,\nаудит и очередь")
+}
+
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, платежи, акты ДТП,\nочередь асинхронных задач (outbox)")
+ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи, документы\n(PDF полисов и протоколов)")
+
+Container_Boundary(worker, "Worker (Python / Celery)") {
+    Component(w_poll, "OutboxPoller", "Celery Task", "Забирает задачи\nиз outbox")
+    Component(w_pdf, "PdfTask", "Celery Task", "PDF полисов\nи протоколов")
+    Component(w_ntf, "NotificationTask", "Celery Task", "Письма: полисы, чеки,\nпротоколы, сбои")
+    Component(w_doc, "DocumentService", "Python", "Сборка PDF,\nочистка файлов")
+    Component(w_snt, "NotificationService", "Python", "Шаблоны писем\nи вложения")
+    Component(w_saud, "AuditService", "Python", "Статусы задач\nи логи")
+    Component(w_file, "FileRepository", "PyMongo", "Фото, подписи, PDF")
+    Component(w_mail, "EmailFacade", "SMTP Client", "Полисы, чеки, счета,\nотчеты, уведомления")
+    Component(w_aud, "AuditRepository", "SQLAlchemy", "Outbox, статусы\nзадач, аудит")
+}
+
+System_Ext(email_sys, "E-mail система", "Рассылка и обмен письмами: полисы, чеки, протоколы,\nсчета, акты, отчеты, уведомления о сбоях")
+
+' --- Фаза А: клиент подписывает протокол в Web App ---
+Rel(client, p_insp, "1. Открывает протокол осмотра и ставит подпись", "HTTPS")
+Rel(p_insp, u_sig, "2. Получает подпись с канваса", "React props")
+Rel(p_insp, l_insp, "3. Передает подпись на отправку", "React Hooks")
+Rel(l_insp, a_insp, "4. Вызывает отправку подписи", "TypeScript call")
+Rel(a_insp, http, "5. Формирует запрос POST /claims/{claim_id}/signature", "TypeScript call")
+Rel(http, l_auth, "6. Берет токен пользователя", "React Context")
+Rel(http, c_insp, "7. Передает подпись клиента", "REST/HTTPS, JSON")
+
+' --- Фаза Б: API проверяет права, принимает подпись и ставит задачу PDF в outbox ---
+Rel(c_insp, acc, "8. Проверка прав (RBAC) по токену", "Python Call")
+Rel(c_insp, s_insp, "9. InspectionController.accept_signature() вызывает InspectionService.accept_signature()", "Python Call")
+Rel(s_insp, r_file, "10. FileRepository.save_signature(claim_id, signature)", "Python Call")
+Rel(r_file, db_files, "11. Сохраняет подпись клиента", "MongoDB driver")
+Rel(s_insp, f_task, "12. TaskQueueFacade.enqueue(TaskItem PDF_PROTOCOL)", "Python Call")
+Rel(f_task, r_acc, "13. AccidentRepository.save_task(task)", "Python Call")
+Rel(r_acc, db_audit, "14. Записывает задачу PDF_PROTOCOL в outbox (status = pending)", "SQL")
+Rel(s_insp, aud, "15. AuditService.log_event(protocol_signed)", "Python Call")
+Rel(aud, r_acc, "16. AccidentRepository.save_audit(event)", "Python Call")
+Rel(r_acc, db_audit, "17. Записывает событие аудита", "SQL")
+
+' --- Фаза В: Worker забирает задачу и формирует PDF протокола ---
+Rel(w_poll, w_aud, "18. Читает задачи outbox (list_pending_tasks)", "Python Call")
+Rel(w_aud, db_audit, "19. Забирает задачу PDF_PROTOCOL из outbox", "SQL")
+Rel(w_poll, w_pdf, "20. Передает задачу PDF_PROTOCOL", "Python Call")
+Rel(w_pdf, w_doc, "21. Передает на сборку PDF протокола", "Python Call")
+Rel(w_doc, w_file, "22. Запрашивает фото и подпись, сохраняет PDF", "Python Call")
+Rel(w_file, db_files, "23. Читает фото и подпись, сохраняет PDF протокола", "MongoDB driver")
+Rel(w_doc, w_saud, "24. Передает статус выполнения задачи PDF_PROTOCOL", "Python Call")
+Rel(w_saud, w_aud, "25. Отмечает задачу выполненной (mark_task_done)", "Python Call")
+Rel(w_aud, db_audit, "26. Обновляет статус задачи в outbox (status = done)", "SQL")
+
+' --- Фаза Г: Worker отправляет протокол клиенту ---
+Rel(w_poll, w_ntf, "27. Передает задачу отправки протокола", "Python Call")
+Rel(w_ntf, w_snt, "28. Передает на формирование письма", "Python Call")
+Rel(w_snt, w_file, "29. Запрашивает PDF протокола", "Python Call")
+Rel(w_file, db_files, "30. Читает PDF протокола", "MongoDB driver")
+Rel(w_snt, w_mail, "31. Передает письмо с вложением на отправку", "Python Call")
+Rel(w_mail, email_sys, "32. Отправляет протокол осмотра", "SMTP / HTTPS")
+Rel(w_snt, w_saud, "33. Передает статус отправки письма", "Python Call")
+Rel(w_saud, w_aud, "34. Сохраняет статус задачи отправки", "Python Call")
+Rel(w_aud, db_audit, "35. Обновляет статус задачи отправки (status = done)", "SQL")
+Rel(email_sys, client, "36. Доставляет протокол осмотра", "E-mail")
+@enduml

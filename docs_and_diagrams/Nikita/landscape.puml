@@ -1,0 +1,52 @@
+@startuml
+!include <C4/C4_Context>
+skinparam wrapWidth 240
+skinparam maxMessageSize 240
+skinparam defaultFontName "Liberation Sans"
+skinparam dpi 140
+AddElementTag("target", $bgColor="#2E86C1", $fontColor="#FFFFFF", $borderColor="#1B4F72", $legendText="Целевой модуль")
+AddElementTag("ext", $bgColor="#A6A6A6", $fontColor="#FFFFFF", $borderColor="#7F7F7F", $legendText="Внешняя система")
+AddElementTag("city", $bgColor="#7DAA92", $fontColor="#FFFFFF", $borderColor="#4E7A63", $legendText="Сервис Smart City (предлагаемая интеграция)")
+AddRelTag("async", $lineStyle=DashedLine(), $legendText="Асинхронное взаимодействие")
+LAYOUT_TOP_DOWN()
+title ИС ОСАГО, продажа полисов. SYSTEM LANDSCAPE (L0) — модуль Web App (клиент, агент, менеджер)
+
+Person(guest, "Гость", "Считает стоимость полиса\nбез регистрации")
+Person(client, "Клиент", "Оформляет полис,\nличный кабинет")
+Person(agent, "Страховой агент", "Оформляет полисы клиентам,\nпередаёт данные о продажах")
+Person(mgr, "Менеджер отдела продаж", "Отчёты по продажам,\nагенты, сложные случаи")
+Person(payer, "Застрахованный клиент", "Оплачивает полис")
+
+Enterprise_Boundary(ent, "Корпоративная ИТ-инфраструктура страховой компании") {
+  System(web, "ИС ОСАГО: продажа и оформление полисов (Web App)", "Расчёт премии, оформление и оплата полиса, личный кабинет, рабочие места агента и менеджера", $tags="target")
+  System(iam, "Служба авторизации (IAM)", "Вход по одноразовому коду, RBAC, токены")
+  System(core, "Подсистема расчёта и учёта полисов", "API и Worker: тарифы, полисы, платежи, регистрация договоров, PDF")
+  System(crm, "CRM страховой компании", "Клиенты и лиды агентов, история продаж")
+}
+Boundary(city, "Экосистема Smart City") {
+  System_Ext(portal, "Городской портал услуг", "Каталог городских сервисов для граждан", $tags="city")
+  System_Ext(esia, "ЕСИА (Госуслуги)", "Подтверждённая учётная запись гражданина", $tags="city")
+}
+System_Ext(ais, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей, регистрация договоров", $tags="ext")
+System_Ext(pay, "Платёжная система", "Платёжные сессии, уведомления об оплате", $tags="ext")
+System_Ext(sms, "SMS-шлюз", "Одноразовые коды входа", $tags="ext")
+System_Ext(email, "E-mail система", "Электронный полис и чек", $tags="ext")
+
+Rel(guest, web, "Считает стоимость полиса", "HTTPS")
+Rel(client, web, "Оформляет полис, скачивает его", "HTTPS")
+Rel(agent, web, "Оформляет полисы, передаёт продажи и КВ", "HTTPS")
+Rel(mgr, web, "Смотрит отчёты по продажам", "HTTPS")
+Rel(portal, web, "Переход гражданина к расчёту и оформлению полиса", "HTTPS (ссылка с параметрами)")
+Rel(web, esia, "Вход гражданина через Госуслуги (предлагается)", "HTTPS, OAuth2 / OIDC")
+Rel(web, iam, "Вход по коду, роль, токен", "HTTPS, JSON, OAuth2")
+Rel(iam, sms, "Отправляет одноразовый код", "HTTPS, JSON")
+Rel(web, core, "Расчёт, оформление, оплата, PDF полиса, продажи агента", "REST/HTTPS, JSON")
+Rel(web, crm, "Данные о продажах агента и клиенте", "HTTPS, JSON", $tags="async")
+Rel(core, ais, "КБМ, проверки ТС и водителей, регистрация договора", "HTTPS, JSON, mTLS")
+Rel(core, pay, "Создаёт платёжную сессию", "HTTPS, JSON")
+Rel(payer, pay, "Оплачивает полис", "HTTPS")
+Rel(pay, core, "Уведомляет об оплате (webhook)", "HTTPS, JSON", $tags="async")
+Rel(core, email, "Отправляет полис и чек", "SMTP / STARTTLS", $tags="async")
+Rel(email, client, "Доставляет электронный полис", "E-mail", $tags="async")
+SHOW_LEGEND()
+@enduml

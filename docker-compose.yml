@@ -1,0 +1,9 @@
+services:
+  osago-api:
+    build: .
+    container_name: osago-api
+    ports:
+      - "80:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

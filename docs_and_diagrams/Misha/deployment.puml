@@ -1,0 +1,114 @@
+@startuml
+title ИС ОСАГО, фин. контроль и маржа. DEPLOYMENT DIAGRAM — развертывание модуля бухгалтера и финансового контроля
+
+skinparam nodesep 50
+skinparam ranksep 70
+skinparam node {
+    BackgroundColor #E8F4FB
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam artifact {
+    BackgroundColor #6cc2f5
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam database {
+    BackgroundColor #A9D8F5
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam cloud {
+    BackgroundColor #F5F5F5
+    BorderColor #A9A9A9
+    FontColor #000000
+}
+skinparam ArrowColor #143560
+
+
+' === ПЕРИФЕРИЯ И ВНЕШНИЕ СИСТЕМЫ ===
+node "Рабочее место\nбухгалтера, аудитора, фин. менеджера\n(браузер)" as workstation
+
+cloud "Интернет / Внешние сервисы" as internet {
+    node "Платежная система / Эквайринг\nвнешний банковский шлюз" as bank
+    node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+    node "E-mail система\nпочтовый сервер отчетов" as email
+}
+
+
+' === ИНФРАСТРУКТУРА ПРЕДПРИЯТИЯ (ON-PREM / CONTAINER CLUSTER) ===
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as server {
+
+    node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
+
+        artifact "Nginx Reverse Proxy\n:443, TLS 1.2+\nединственная точка входа" as nginx
+
+        artifact "Web App\nстатический бандл React SPA\n(модуль бухгалтерии)" as web_bundle
+
+        artifact "API (FastAPI)\nреплика 1\n:8000" as api1
+
+        artifact "API (FastAPI)\nреплика 2\n:8000" as api2
+
+        artifact "Worker (Celery)\nинстанс 1\n(расчет маржи и сверка)" as worker1
+
+        artifact "Worker (Celery)\nинстанс 2\n(генерация отчетов PDF)" as worker2
+
+        database "BD_AUDIT\nPostgreSQL, Master\n:5432, TLS\n(очередь задач, транзакции, логи)" as pg_audit_master
+
+        database "BD_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as pg_audit_replica
+
+        database "BD_TARIFS\nPostgreSQL\n:5432, TLS\n(тарифные коэффициенты и КВ)" as pg_tariffs
+
+        database "DB_FILES\nMongoDB / GridFS\n:27017, TLS\n(акты и PDF-протоколы)" as mongo_files
+    }
+}
+
+
+' === СВЯЗИ: ПОЛЬЗОВАТЕЛИ -> ИНФРАСТРУКТУРА ===
+workstation --> nginx : "HTTPS, TLS 1.2+, HSTS\n:443/TCP"
+nginx --> web_bundle : "отдача статики\n:443/TCP"
+
+
+' === СВЯЗИ: БАЛАНСИРОВКА И ОТКАЗОУСТОЙЧИВОСТЬ API ===
+nginx --> api1 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
+nginx --> api2 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
+
+
+' === СВЯЗИ: API -> БД ===
+api1 --> pg_audit_master : "SQL/TCP, TLS\n:5432"
+api2 --> pg_audit_master : "SQL/TCP, TLS\n:5432"
+api1 --> pg_tariffs : "SQL/TCP, TLS\n:5432"
+api2 --> pg_tariffs : "SQL/TCP, TLS\n:5432"
+
+
+' === СВЯЗИ: РЕПЛИКАЦИЯ БД ===
+pg_audit_master --> pg_audit_replica : "streaming replication\n:5432/TCP, TLS"
+
+
+' === СВЯЗИ: WORKER -> БД И ХРАНИЛИЩА ===
+worker1 --> pg_audit_master : "чтение задач очереди,\nзапись результатов маржи :5432/TCP"
+worker2 --> pg_audit_master : "запись логов аудита,\nобновление статусов :5432/TCP"
+
+worker1 --> pg_tariffs : "чтение тарифных сеток\nи комиссий :5432/TCP"
+worker2 --> mongo_files : "сохранение сгенерированных\nPDF-отчетов :27017/TCP"
+
+
+' === СВЯЗИ: ИСХОДЯЩИЕ ВО ВНЕШНИЕ СИСТЕМЫ ===
+worker1 --> bank : "HTTPS / REST API\n(сверка зависших транзакций)\n:443/TCP"
+api1 --> ais : "HTTPS, mTLS\n(проверка полисов)\n:443/TCP"
+worker2 --> email : "SMTPS :465/TCP\n(рассылка отчетов бухгалтеру)"
+
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+nginx -[hidden]down- api1
+api1 -[hidden]right- api2
+api2 -[hidden]down- worker1
+worker1 -[hidden]right- worker2
+
+pg_audit_master -[hidden]right- pg_audit_replica
+pg_audit_master -[hidden]down- pg_tariffs
+pg_tariffs -[hidden]right- mongo_files
+
+server -[hidden]up- internet
+
+@enduml

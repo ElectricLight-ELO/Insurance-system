@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Валидация синтаксиса и рендер всех диаграмм architecture/src -> architecture/docs/images
 # Использование: scripts/render.sh [путь_к_plantuml.jar]
 set -uo pipefail

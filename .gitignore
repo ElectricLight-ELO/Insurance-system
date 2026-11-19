@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Демонстрационные данные приложения (SQLite, загруженные фото, протоколы)
+/data/
+
 # C extensions
 *.so
 
@@ -50,7 +53,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-
+*.docx
 # Translations
 *.mo
 *.pot
@@ -216,5 +219,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-*.docx
-*.pdf

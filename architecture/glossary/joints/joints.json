@@ -1,0 +1,320 @@
+{
+ "version": 1,
+ "joints": [
+  {
+   "id": "J-01",
+   "kind": "http",
+   "from": "webapp.AuthApiClient",
+   "to": "api.AuthController",
+   "status": "ok",
+   "note": "",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/auth/code",
+     "request": "CodeRequest",
+     "response": "-",
+     "status": "proposed"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/verify",
+     "request": "CodeVerifyRequest",
+     "response": "TokenResponse",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-02",
+   "kind": "http",
+   "from": "webapp.AccidentApiClient",
+   "to": "api.AccidentController",
+   "status": "ok",
+   "note": "",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/claims",
+     "request": "ClaimCreateRequest",
+     "response": "ClaimResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "GET",
+     "path": "/api/claims",
+     "request": "-",
+     "response": "ClaimResponse[]",
+     "status": "implemented"
+    },
+    {
+     "method": "GET",
+     "path": "/api/claims/{claim_id}",
+     "request": "-",
+     "response": "ClaimResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "POST",
+     "path": "/api/claims/{claim_id}/assign",
+     "request": "-",
+     "response": "ClaimResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "POST",
+     "path": "/api/claims/{claim_id}/status",
+     "request": "StatusChangeRequest",
+     "response": "ClaimResponse",
+     "status": "implemented"
+    }
+   ]
+  },
+  {
+   "id": "J-03",
+   "kind": "http",
+   "from": "webapp.InspectionApiClient",
+   "to": "api.InspectionController",
+   "status": "mismatch",
+   "note": "Клиент Никиты (inspection_logic/integration/api_client.py) шлёт POST {base}/inspections с телом DamageAssessmentDTO — такого маршрута и такого тела в API нет.",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/claims/{claim_id}/inspection",
+     "request": "InspectionCreateRequest",
+     "response": "InspectionResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "POST",
+     "path": "/api/claims/{claim_id}/photos",
+     "request": "multipart:files",
+     "response": "PhotosResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "POST",
+     "path": "/api/claims/{claim_id}/signature",
+     "request": "SignatureRequest",
+     "response": "SignatureResponse",
+     "status": "implemented"
+    },
+    {
+     "method": "GET",
+     "path": "/api/claims/{claim_id}/protocol",
+     "request": "-",
+     "response": "application/pdf",
+     "status": "implemented"
+    }
+   ]
+  },
+  {
+   "id": "J-04",
+   "kind": "http",
+   "from": "webapp.PolicyApiClient",
+   "to": "api.PaymentController",
+   "status": "partial",
+   "note": "Только оплата. Расчёт, оформление и PDF полиса из описания PolicyApiClient принимающего контроллера не имеют.",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/payments/session",
+     "request": "PaymentSessionRequest",
+     "response": "PaymentSessionResponse",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-05",
+   "kind": "http",
+   "from": "backoffice.AuthApiClient",
+   "to": "api.AuthController",
+   "status": "ok",
+   "note": "",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/auth/code",
+     "request": "CodeRequest",
+     "response": "-",
+     "status": "proposed"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/verify",
+     "request": "CodeVerifyRequest",
+     "response": "TokenResponse",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-06",
+   "kind": "http",
+   "from": "backoffice.AdminApiClient",
+   "to": "api.AdminController",
+   "status": "ok",
+   "note": "",
+   "endpoints": [
+    {
+     "method": "GET",
+     "path": "/api/admin/users",
+     "request": "-",
+     "response": "UserDTO[]",
+     "status": "proposed"
+    },
+    {
+     "method": "POST",
+     "path": "/api/admin/users",
+     "request": "UserDTO",
+     "response": "UserDTO",
+     "status": "proposed"
+    },
+    {
+     "method": "GET",
+     "path": "/api/admin/tariffs",
+     "request": "-",
+     "response": "TariffDTO[]",
+     "status": "proposed"
+    },
+    {
+     "method": "PUT",
+     "path": "/api/admin/tariffs",
+     "request": "TariffDTO",
+     "response": "TariffDTO",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-07",
+   "kind": "http",
+   "from": "backoffice.OperationsApiClient",
+   "to": "api.AdminController",
+   "status": "ok",
+   "note": "Перезапуск задач, поиск полисов и статусы платежей принимает AdminController (после правки L3).",
+   "endpoints": [
+    {
+     "method": "POST",
+     "path": "/api/admin/tasks/{task_id}/restart",
+     "request": "TaskRestartRequest",
+     "response": "-",
+     "status": "proposed"
+    },
+    {
+     "method": "GET",
+     "path": "/api/admin/policies",
+     "request": "-",
+     "response": "PolicyDTO[]",
+     "status": "proposed"
+    },
+    {
+     "method": "GET",
+     "path": "/api/admin/payments",
+     "request": "-",
+     "response": "PaymentDTO[]",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-08",
+   "kind": "http",
+   "from": "backoffice.AuditApiClient",
+   "to": "api.AdminController",
+   "status": "ok",
+   "note": "",
+   "endpoints": [
+    {
+     "method": "GET",
+     "path": "/api/admin/audit",
+     "request": "-",
+     "response": "AuditEventDTO[]",
+     "status": "proposed"
+    }
+   ]
+  },
+  {
+   "id": "J-09",
+   "kind": "queue",
+   "from": "api.TaskQueueFacade",
+   "to": "worker.OutboxPoller",
+   "status": "ok",
+   "note": "API кладёт запись в outbox (через AccidentRepository), Worker забирает. Тип задачи — TaskType.",
+   "contract": "OutboxTask",
+   "via": "db_audit"
+  },
+  {
+   "id": "J-10",
+   "kind": "store",
+   "from": "api.AccidentRepository",
+   "to": "worker.AuditRepository",
+   "status": "ok",
+   "note": "Общая таблица очереди: API — писатель, Worker — читатель и обновляет статусы.",
+   "contract": "OutboxTask",
+   "via": "db_audit"
+  },
+  {
+   "id": "J-11",
+   "kind": "store",
+   "from": "api.FileRepository",
+   "to": "worker.FileRepository",
+   "status": "ok",
+   "note": "API кладёт фото и подписи, Worker читает их и сохраняет PDF.",
+   "contract": "StoredDocument",
+   "via": "db_files"
+  },
+  {
+   "id": "J-12",
+   "kind": "store",
+   "from": "api.TariffRepository",
+   "to": "worker.TariffRepository",
+   "status": "ok",
+   "note": "API читает и меняет тарифы и отдаёт результаты маржи, Worker читает данные расчёта и пишет результаты маржи (MarginReportDTO).",
+   "via": "db_tarifs",
+   "contract": "MarginReportDTO"
+  },
+  {
+   "id": "J-13",
+   "kind": "store",
+   "from": "api.AccidentRepository",
+   "to": "worker.TransactionRepository",
+   "status": "ok",
+   "note": "API пишет транзакции (AccidentRepository, PaymentService), Worker читает их и обновляет статусы (TransactionRepository).",
+   "via": "db_audit",
+   "contract": "TransactionRecord"
+  },
+  {
+   "id": "J-14",
+   "kind": "http",
+   "from": "backoffice.FinanceApiClient",
+   "to": "api.AdminController",
+   "status": "ok",
+   "note": "Финансовые запросы принимает AdminController (после правки L3).",
+   "endpoints": [
+    {
+     "method": "GET",
+     "path": "/api/admin/finance/margin",
+     "request": "-",
+     "response": "MarginReportDTO[]",
+     "status": "proposed"
+    },
+    {
+     "method": "GET",
+     "path": "/api/admin/finance/payments",
+     "request": "-",
+     "response": "PaymentDTO[]",
+     "status": "proposed"
+    },
+    {
+     "method": "POST",
+     "path": "/api/admin/finance/invoices",
+     "request": "InvoiceRequest",
+     "response": "-",
+     "status": "proposed"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+@startuml
+skinparam dpi 170
+skinparam defaultFontName Times New Roman
+skinparam ParticipantPadding 14
+skinparam sequenceMessageAlign center
+title Оплата полиса и регистрация договора
+actor "Клиент" as C
+participant "Web App\n(PolicyApiClient)" as W
+participant "API\n(PaymentController,\nPaymentService)" as A
+participant "Платежная система" as P
+database "DB_AUDIT" as DB
+participant "Worker" as K
+participant "АИС ОСАГО (РСА)" as R
+participant "E-mail система" as M
+C -> W : «Оплатить полис»
+W -> A : POST /api/payments/session {policy_id, amount}
+A -> P : создать платежную сессию
+P --> A : session_id, pay_url
+A -> DB : INSERT transactions (pending)
+A --> W : 200 {session_id, pay_url}
+W --> C : переход на pay_url
+C -> P : оплата
+P -> A : POST /api/payments/webhook {session_id, status, amount}
+A -> DB : UPDATE transactions (paid), audit_events
+A -> DB : INSERT outbox_tasks (contract_reg), (email_send)
+A --> P : 200 OK
+K -> DB : забрать задачи
+K -> R : зарегистрировать договор
+R --> K : номер договора
+K -> M : отправить полис и чек
+K -> DB : UPDATE outbox_tasks (done)
+K -> P : сверка зависших платежей (по расписанию)
+@enduml
