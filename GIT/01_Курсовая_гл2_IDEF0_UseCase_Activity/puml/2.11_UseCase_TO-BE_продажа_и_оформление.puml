@@ -1,0 +1,69 @@
+@startuml
+skinparam dpi 120
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam rectangle {
+  BorderColor black
+  BorderThickness 2
+  FontStyle bold
+  BackgroundColor white
+}
+skinparam usecase {
+  BackgroundColor white
+  BorderColor black
+  ArrowColor black
+}
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+skinparam nodesep 18
+skinparam ranksep 90
+left to right direction
+actor "Гость" as G
+actor "Клиент" as C
+actor "Страховой\nагент" as A
+actor "Менеджер\nотдела продаж" as M
+actor "Платёжная\nсистема" as PS
+actor "АИС ОСАГО\n(РСА)" as RSA
+actor "SMS-шлюз" as SMS
+actor "E-mail\nсистема" as EM
+rectangle "ИС ОСАГО: продажа и оформление полисов (как должно быть)" {
+  usecase "Рассчитать стоимость\nполиса онлайн" as U1 #C5E0B3
+  usecase "Получить КБМ, проверить ТС\nи водителей автоматически" as U2 #C5E0B3
+  usecase "Оформить полис\nв системе" as U3 #C5E0B3
+  usecase "Войти по\nодноразовому коду" as U4 #BDD7EE
+  usecase "Оплатить полис онлайн" as U5 #C5E0B3
+  usecase "Зарегистрировать договор\nв АИС ОСАГО автоматически" as U6 #C5E0B3
+  usecase "Получить электронный полис\n(кабинет, e-mail)" as U7 #BDD7EE
+  usecase "Смотреть свои продажи\nи комиссионное вознаграждение" as U8 #BDD7EE
+  usecase "Получить отчёт по продажам\nиз единой базы" as U9 #C5E0B3
+  usecase "Утвердить\nсложный случай" as U10
+}
+G -- U1
+C -- U1
+C -- U3
+C -- U5
+C -- U7
+A -- U1
+A -- U3
+A -- U8
+M -- U9
+M -- U10
+U3 ..> U1 : <<include>>
+U3 ..> U4 : <<include>>
+U1 ..> U2 : <<include>>
+U5 ..> U6 : <<include>>
+U2 --> RSA
+U6 --> RSA
+U5 --> PS
+U4 --> SMS
+U7 --> EM
+legend left
+  <back:#C5E0B3>  зелёный  </back> прецеденты, устраняющие проблемы модели «как есть» (п. 2.2.4)
+  <back:#BDD7EE>  голубой  </back> новые возможности, отсутствовавшие в модели «как есть»
+  белый — неизменяемые части
+endlegend
+@enduml

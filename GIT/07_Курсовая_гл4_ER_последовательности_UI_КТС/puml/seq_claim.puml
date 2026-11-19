@@ -1,0 +1,44 @@
+@startuml
+skinparam dpi 170
+skinparam defaultFontName Times New Roman
+skinparam ParticipantPadding 12
+skinparam sequenceMessageAlign center
+title Заявление о ДТП, осмотр и выпуск протокола (асинхронно через outbox)
+actor "Диспетчер" as Disp
+actor "Эксперт" as Exp
+participant "Web App" as W
+participant "API\n(Accident/Inspection\nController+Service)" as A
+participant "АИС ОСАГО (РСА)" as R
+database "DB_AUDIT\n(claims, outbox)" as DB
+database "DB_FILES" as F
+participant "Worker\n(OutboxPoller, PdfTask)" as K
+participant "E-mail система" as M
+Disp -> W : форма заявления
+W -> A : POST /api/claims {policy_number, region, description}
+A -> R : check_policy(policy_number)
+R --> A : полис действителен
+A -> DB : INSERT accident_claims (status=new), audit_events
+A --> W : 201 ClaimResponse
+Disp -> W : назначить эксперта
+W -> A : POST /api/claims/{id}/assign
+A -> DB : UPDATE status=assigned, expert_id
+A --> W : 200 ClaimResponse
+Exp -> W : фото, заключение, подпись
+W -> A : POST /api/claims/{id}/photos
+A -> F : сохранить фото
+W -> A : POST /api/claims/{id}/inspection {damage_found, notes}
+A -> DB : INSERT inspections, UPDATE status=inspection
+W -> A : POST /api/claims/{id}/signature {signed_by}
+A -> F : сохранить подпись
+A -> DB : INSERT outbox_tasks (pdf_protocol, pending)
+A --> W : 200 SignatureResponse
+... асинхронно ...
+K -> DB : выбрать pending-задачи
+K -> F : прочитать фото и подпись
+K -> F : сохранить PDF протокола
+K -> M : отправить протокол клиенту
+K -> DB : UPDATE outbox_tasks (status=done)
+W -> A : GET /api/claims/{id}/protocol
+A -> F : получить PDF
+A --> W : 200 PDF
+@enduml

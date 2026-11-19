@@ -1,0 +1,166 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, администрирование и RBAC
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+
+AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
+
+Container(web_app, "Web App", "React SPA", "Админ-панель: пользователи, роли,\nтарифы, журнал аудита, задачи")
+
+Container_Boundary(api, "API — FASTAPI") {
+
+    ' --- Слой API / представления ---
+    together {
+        Component(c_auth, "AuthController", "FastAPI Router", "Вход по одноразовому коду:\nзапрос кода, проверка кода,\nвыдача токена доступа", $tags="api")
+        Component(c_users, "UserController", "FastAPI Router", "Принимает REST-запросы:\nсоздание и блокировка\nпользователей, назначение ролей", $tags="api")
+        Component(c_tariffs, "TariffController", "FastAPI Router", "Принимает REST-запросы:\nпросмотр и изменение тарифов\nи коэффициентов", $tags="api")
+        Component(c_audit, "AuditController", "FastAPI Router", "Принимает REST-запросы:\nпоиск и просмотр событий\nжурнала аудита", $tags="api")
+        Component(c_maint, "MaintenanceController", "FastAPI Router", "Принимает REST-запросы:\nповтор сбойных задач, отчеты,\nпросмотр и удаление документов", $tags="api")
+    }
+
+    ' --- Слой бизнес-логики ---
+    together {
+        Component(s_access, "AccessService", "Python Service", "Проверка прав доступа (RBAC)\nпо подменяемой политике\n(Strategy)", $tags="service")
+        Component(s_auth, "AuthService", "Python Service", "Генерация и проверка\nодноразового кода,\nвыпуск токена", $tags="service")
+        Component(s_users, "UserService", "Python Service", "Бизнес-правила учетных записей:\nсоздание, блокировка,\nназначение ролей", $tags="service")
+        Component(s_tariffs, "TariffService", "Python Service", "Валидация и публикация\nтарифных сеток\nи коэффициентов", $tags="service")
+        Component(s_maint, "MaintenanceService", "Python Service", "Повтор задач, постановка\nотчетов, удаление документов\nпо команде администратора", $tags="service")
+        Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nпо каждому действию,\nпоиск по журналу", $tags="service")
+    }
+
+    ' --- Слой интеграции ---
+    together {
+        Component(f_sms, "SmsGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nотправка одноразового кода\nчерез SMS-шлюз", $tags="integration")
+        Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(повтор, отчеты)", $tags="integration")
+    }
+
+    ' --- Слой доступа к данным ---
+    together {
+        Component(r_users, "UserRepository", "SQLAlchemy", "Доступ к пользователям, ролям,\nправам и одноразовым кодам\nв PostgreSQL", $tags="data")
+        Component(r_tariffs, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам\nи коэффициентам\nв PostgreSQL", $tags="data")
+        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к журналу аудита\nи очереди задач\nв PostgreSQL", $tags="data")
+        Component(r_files, "FileRepository", "PyMongo", "Доступ к фото ДТП, подписям\nи документам\nв MongoDB", $tags="data")
+    }
+}
+
+' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_users, "BD_USERS", "PostgreSQL", "Пользователи, роли,\nправа доступа (RBAC)")
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки,\nкоэффициенты, правила расчета")
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Журнал аудита,\nочередь задач")
+    ContainerDb(object_storage, "BD_DTP", "MongoDB", "Фото ДТП, подписи,\nфайлы документов")
+}
+together {
+    System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
+}
+
+' === СВЯЗИ (RELATIONSHIPS) ===
+
+' Web App -> Контроллеры
+Rel(web_app, c_auth, "Вход по коду [REST/JSON]")
+Rel(web_app, c_users, "Пользователи и роли [REST/JSON]")
+Rel(web_app, c_tariffs, "Тарифы [REST/JSON]")
+Rel(web_app, c_audit, "Журнал аудита [REST/JSON]")
+Rel(web_app, c_maint, "Задачи и документы [REST/JSON]")
+
+' Контроллеры -> Сервисы
+Rel(c_auth, s_auth, "Вызов логики [Python]")
+Rel(c_users, s_users, "Вызов логики [Python]")
+Rel(c_tariffs, s_tariffs, "Вызов логики [Python]")
+Rel(c_audit, s_audit, "Вызов логики [Python]")
+Rel(c_maint, s_maint, "Вызов логики [Python]")
+
+' Контроллеры -> Проверка прав (RBAC, FastAPI Depends)
+Rel(c_users, s_access, "Проверка прав [Python]")
+Rel(c_tariffs, s_access, "Проверка прав [Python]")
+Rel(c_audit, s_access, "Проверка прав [Python]")
+Rel(c_maint, s_access, "Проверка прав [Python]")
+
+' Сервисы -> Аудит
+Rel(s_auth, s_audit, "События входа [Python]")
+Rel(s_users, s_audit, "События аудита [Python]")
+Rel(s_tariffs, s_audit, "События аудита [Python]")
+Rel(s_maint, s_audit, "События аудита [Python]")
+
+' Сервисы -> Фасады
+Rel(s_auth, f_sms, "Отправка кода [Python]")
+Rel(s_maint, f_task, "Задача на повтор / отчет [Python]")
+
+' Сервисы -> Репозитории
+Rel(s_access, r_users, "Роли и права [SQLAlchemy]")
+Rel(s_auth, r_users, "Пользователь и код [SQLAlchemy]")
+Rel(s_users, r_users, "Чтение/запись [SQLAlchemy]")
+Rel(s_tariffs, r_tariffs, "Чтение/запись [SQLAlchemy]")
+Rel(s_audit, r_audit, "Запись и поиск аудита [SQLAlchemy]")
+Rel(s_maint, r_audit, "Сбойные задачи [SQLAlchemy]")
+Rel(s_maint, r_files, "Просмотр и удаление [PyMongo]")
+
+' Фасад -> Репозиторий
+Rel(f_task, r_audit, "Очередь задач [SQL]")
+
+' Репозитории -> БД
+Rel(r_users, db_users, "Данные [SQL/TCP]")
+Rel(r_tariffs, db_tarifs, "Данные [SQL/TCP]")
+Rel(r_audit, db_audit, "Данные и очередь [SQL/TCP]")
+Rel(r_files, object_storage, "Файлы [MongoDB Wire/GridFS]")
+
+' Фасад -> Внешняя система
+Rel(f_sms, sms_sys, "Одноразовый код [HTTP(S)/JSON]")
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+
+' 1. Выстраиваем контроллеры в ряд
+c_auth -[hidden]right- c_users
+c_users -[hidden]right- c_tariffs
+c_tariffs -[hidden]right- c_audit
+c_audit -[hidden]right- c_maint
+
+' 2. Выстраиваем сервисы в ряд
+s_auth -[hidden]right- s_access
+s_access -[hidden]right- s_users
+s_users -[hidden]right- s_tariffs
+s_tariffs -[hidden]right- s_audit
+s_audit -[hidden]right- s_maint
+
+' 3. Выстраиваем фасады в ряд
+f_sms -[hidden]right- f_task
+
+' 4. Выстраиваем репозитории в ряд
+r_users -[hidden]right- r_tariffs
+r_tariffs -[hidden]right- r_audit
+r_audit -[hidden]right- r_files
+
+' 5. Выстраиваем БД и внешние системы в ряд
+sms_sys -[hidden]right- db_users
+db_users -[hidden]right- db_tarifs
+db_tarifs -[hidden]right- db_audit
+db_audit -[hidden]right- object_storage
+
+' 6. Вертикальные связи для жесткой иерархии слоев
+web_app -[hidden]down- c_tariffs
+
+c_auth -[hidden]down- s_auth
+c_users -[hidden]down- s_users
+c_tariffs -[hidden]down- s_tariffs
+c_maint -[hidden]down- s_maint
+
+s_auth -[hidden]down- f_sms
+s_maint -[hidden]down- f_task
+
+f_sms -[hidden]down- r_users
+f_task -[hidden]down- r_files
+
+r_users -[hidden]down- db_users
+r_tariffs -[hidden]down- db_tarifs
+r_audit -[hidden]down- db_audit
+r_files -[hidden]down- object_storage
+
+' === ЛЕГЕНДА ===
+SHOW_LEGEND()
+
+@enduml

@@ -1,0 +1,8 @@
+{
+  "plantuml.render": "PlantUMLServer",
+  "plantuml.server": "http://localhost:8080",
+  "plantuml.exportFormat": "png",
+  "plantuml.exportOutDir": "architecture/docs/local",
+  "files.encoding": "utf8",
+  "files.eol": "\n"
+}

@@ -1,0 +1,114 @@
+@startuml
+title ИС ОСАГО, фиксация ДТП. DEPLOYMENT DIAGRAM — локальный сегмент модуля аварийного эксперта
+
+skinparam nodesep 50
+skinparam ranksep 70
+skinparam node {
+    BackgroundColor #E8F4FB
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam artifact {
+    BackgroundColor #6cc2f5
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam database {
+    BackgroundColor #A9D8F5
+    BorderColor #2E86C1
+    FontColor #000000
+}
+skinparam cloud {
+    BackgroundColor #F5F5F5
+    BorderColor #A9A9A9
+    FontColor #000000
+}
+skinparam ArrowColor #143560
+
+
+' === ПЕРИФЕРИЯ И ВНЕШНИЕ СИСТЕМЫ ===
+node "Рабочие места\nдиспетчера, эксперта, клиента\n(браузер)" as workstation
+
+cloud "Интернет" as internet {
+    node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+    node "E-mail система\nвнешний почтовый релей" as email
+}
+
+
+' === ИНФРАСТРУКТУРА ПРЕДПРИЯТИЯ (ON-PREM) ===
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as server {
+
+    node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
+
+        artifact "Nginx Reverse Proxy\n:443, TLS 1.2+\nединственная точка входа" as nginx
+
+        artifact "Web App\nстатический бандл React SPA\n(отдаётся Nginx)" as web_bundle
+
+        artifact "API (FastAPI)\nреплика 1\n:8000" as api1
+
+        artifact "API (FastAPI)\nреплика 2\n:8000" as api2
+
+        artifact "Worker (Celery)\nинстанс 1" as worker1
+
+        artifact "Worker (Celery)\nинстанс 2" as worker2
+
+        database "DB_AUDIT\nPostgreSQL, Master\n:5432, TLS" as pg_master
+
+        database "DB_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as pg_replica
+
+        database "DB_FILES\nMongoDB, Primary\n:27017, TLS" as mongo_primary
+
+        database "DB_FILES\nMongoDB, Secondary\n:27017" as mongo_secondary
+    }
+}
+
+
+' === СВЯЗИ: ПОЛЬЗОВАТЕЛИ -> ИНФРАСТРУКТУРА ===
+workstation --> nginx : "HTTPS, TLS 1.2+, HSTS\n:443/TCP"
+nginx --> web_bundle : "отдача статики\n:443/TCP"
+
+
+' === СВЯЗИ: БАЛАНСИРОВКА И ОТКАЗОУСТОЙЧИВОСТЬ API ===
+nginx --> api1 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
+nginx --> api2 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
+
+
+' === СВЯЗИ: API -> БД ===
+api1 --> pg_master : "SQL/TCP, TLS\n:5432"
+api2 --> pg_master : "SQL/TCP, TLS\n:5432"
+api1 --> mongo_primary : "MongoDB Wire, TLS\n:27017"
+api2 --> mongo_primary : "MongoDB Wire, TLS\n:27017"
+
+
+' === СВЯЗИ: РЕПЛИКАЦИЯ БД (ОТКАЗОУСТОЙЧИВОСТЬ) ===
+pg_master --> pg_replica : "streaming replication\n:5432/TCP, TLS"
+mongo_primary --> mongo_secondary : "replication\n:27017/TCP, TLS"
+
+
+' === СВЯЗИ: WORKER -> БД ===
+worker1 --> pg_master : "опрос очереди outbox\n:5432/TCP, TLS"
+worker2 --> pg_master : "опрос очереди outbox\n:5432/TCP, TLS"
+worker1 --> mongo_primary : "чтение фото,\nзапись PDF :27017/TCP, TLS"
+worker2 --> mongo_primary : "чтение фото,\nзапись PDF :27017/TCP, TLS"
+
+
+' === СВЯЗИ: ИСХОДЯЩИЕ ВО ВНЕШНИЕ СИСТЕМЫ ===
+api1 --> ais : "HTTPS, mTLS\n(клиентский сертификат)\n:443/TCP"
+api2 --> ais : "HTTPS, mTLS\n(клиентский сертификат)\n:443/TCP"
+worker1 --> email : "SMTPS :465/TCP\nили STARTTLS :587"
+worker2 --> email : "SMTPS :465/TCP\nили STARTTLS :587"
+
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+nginx -[hidden]down- api1
+api1 -[hidden]right- api2
+api2 -[hidden]down- worker1
+worker1 -[hidden]right- worker2
+
+pg_master -[hidden]right- pg_replica
+mongo_primary -[hidden]right- mongo_secondary
+pg_master -[hidden]down- mongo_primary
+
+server -[hidden]up- internet
+
+@enduml
