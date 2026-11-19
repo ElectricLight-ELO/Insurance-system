@@ -1,8 +1,0 @@
-# Локальный PlantUML Server для безопасного рендеринга (без отправки диаграмм в интернет)
-services:
-  plantuml:
-    image: plantuml/plantuml-server:jetty
-    container_name: osago-plantuml
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
