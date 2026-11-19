@@ -1,14 +1,21 @@
 # ИС ОСАГО — Lab 5: Diagrams-as-Code. Валидация и рендер C4-диаграмм.
 # Ответственный: тимлид Таган А.М. (DevOps / релиз-инженер)
+
 name: Auto Render C4 Architecture Docs
 
 on:
   push:
     branches: [ main ]
-    paths: [ 'architecture/**', '.github/workflows/render-docs.yml' ]
+    paths:
+      - 'architecture/**'
+      - '.github/workflows/render-docs.yml'
+
   pull_request:
     branches: [ main ]
-    paths: [ 'architecture/**', '.github/workflows/render-docs.yml' ]
+    paths:
+      - 'architecture/**'
+      - '.github/workflows/render-docs.yml'
+
   workflow_dispatch:
 
 permissions:
@@ -16,21 +23,23 @@ permissions:
 
 env:
   PLANTUML_VERSION: "1.2024.7"
-  GRAPHVIZ_DOT: "/usr/bin/dot"
 
 jobs:
   validate-and-render:
     runs-on: ubuntu-latest
+
     defaults:
       run:
-        shell: bash          
+        shell: bash
         working-directory: architecture
+
     steps:
+
       - name: Checkout repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Java Environment
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -39,10 +48,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz fonts-liberation
-          # Диагностика: dot должен быть доступен до рендера
-          which dot
-          dot -V
-          echo "GRAPHVIZ_DOT=$(which dot)"
 
       - name: Download PlantUML Jar Executable
         run: |
@@ -55,19 +60,16 @@ jobs:
           python3 scripts/check_rules.py 2>&1 | tee docs/ci_rules.log
 
       - name: Validate Syntax and Compile Diagrams to PNG/SVG
-        env:
-          GRAPHVIZ_DOT: /usr/bin/dot
         run: |
-          # PlantUML не создаёт вложенные каталоги сам — готовим заранее
-          mkdir -p docs/images docs/images/team_tagan
           bash scripts/render.sh plantuml.jar 2>&1 | tee docs/ci_render.log
 
       - name: Build interactive architecture map
-        run: python3 scripts/build_index.py
+        run: |
+          python3 scripts/build_index.py
 
       - name: Upload artifacts (images + build logs)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: c4-architecture-docs
           path: |
@@ -77,7 +79,7 @@ jobs:
 
       - name: Commit and Push Rendered Artifacts
         if: github.event_name == 'push'
-        continue-on-error: true   
+        continue-on-error: true
         run: |
           git config --global user.name 'DevOps Bot'
           git config --global user.email 'devops-bot@users.noreply.github.com'
