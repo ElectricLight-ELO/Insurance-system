@@ -1,53 +1,46 @@
 @startuml
-!include <C4/C4_Container>
-
+!include ../core/C4_Container.puml
 LAYOUT_TOP_DOWN()
-skinparam wrapWidth 185
-skinparam maxMessageSize 150
 
 title СЕРВИС ОФОРМЛЕНИЯ ПОЛИСОВ ОСАГО C4 CONTAINER
 
-AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000")
-
-Person(agent, "Страховой агент", "Специалист страховой компании,\nработающий с клиентами", $tags="user")
-Person(client, "Клиент", "Участник ДТП (застрахованное лицо\nили потерпевшее третье лицо)", $tags="user")
-Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nутверждение сложных случаев", $tags="user")
+Person(agent, "Страховой агент", "Специалист страховой компании,\nработающий с клиентами", $tags="staff")
+Person(client, "Клиент", "Участник ДТП (застрахованное лицо\nили потерпевшее третье лицо)", $tags="staff")
+Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nутверждение сложных случаев", $tags="staff")
 
 System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+
     Container(web_app, "Web App", "React SPA", "Клиентское веб-приложение. Предоставляет интерфейс для агента,\nотправляет REST/HTTPS+JSON запросы к API")
+
     Container(api, "API", "FASTAPI", "Backend сервис. Принимает запросы от Web App,\nвзаимодействует с БД, создаёт задачи для Worker")
+
     Container(worker, "Worker", "Celery / Python", "Асинхронная обработка:\nгенерация PDF-протокола, отправка email,\nповторная регистрация полиса при сбое")
+
     ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Хранит пользователей, роли, права доступа (RBAC)")
     ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Журнал событий аудита и очередь асинхронных задач")
 }
 
-System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная\nсистема страхования", $tags="внешняя_система")
-System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная\nсистема страхования", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="ext")
 
-Rel(agent, web_app, "Составляет и заполняет договора,\nоформляет полис ОСАГО")
-Rel(client, web_app, "Подаёт заявку на оформление полиса,\nполучает готовый полис")
-Rel(manager, web_app, "Просматривает отчёты по продажам,\nуправляет списком агентов,\nутверждает сложные случаи")
-Rel(web_app, api, "REST/HTTPS+JSON — проверка корректности\nи актуальности данных")
+Rel(agent, web_app, "Составляет и заполняет договора,\nоформляет полис ОСАГО", "HTTPS")
 
-Rel(api, worker, "Создание задач на асинхронную обработку")
-Rel(api, db_users, "Аутентификация, проверка прав доступа (RBAC),\nчтение/запись пользователей, SQL")
-Rel(api, db_audit, "Запись событий аудита, SQL")
-Rel(worker, db_audit, "Читает и обновляет очередь задач\nи статусы, SQL")
+Rel(client, web_app, "Подаёт заявку на оформление полиса,\nполучает готовый полис", "HTTPS")
 
-Rel(worker, ais_osago, "Повторная регистрация полиса\nпри ошибке/таймауте", $tags="пунктир")
-Rel(worker, email_sys, "Отправка электронного полиса\nи уведомлений", $tags="пунктир")
-Rel(api, email_sys, "Отправка вопросов и корректировок,\nSMTP/HTTP")
+Rel(manager, web_app, "Просматривает отчёты по продажам,\nуправляет списком агентов,\nутверждает сложные случаи", "HTTPS")
 
-' Невидимые связи задают расположение блоков.
-agent -[hidden]right- client
-client -[hidden]right- manager
-agent -[hidden]down- web_app
-web_app -[hidden]down- api
-api -[hidden]down- db_users
-db_users -[hidden]right- db_audit
-db_users -[hidden]down- worker
-db_audit -[hidden]down- worker
-osago_service -[hidden]down- ais_osago
-ais_osago -[hidden]right- email_sys
+Rel(web_app, api, "проверка корректности\nи актуальности данных", "REST/HTTPS, JSON")
 
+Rel(api, worker, "Ставит задачи на фоновую обработку через DB_AUDIT", "SQL/TCP 5432 (outbox)")
+Rel(api, db_users, "Аутентификация, проверка прав доступа (RBAC),\nчтение/запись пользователей", "SQL/TCP 5432")
+
+Rel(api, db_audit, "Запись событий аудита", "SQL/TCP 5432")
+
+Rel(worker, db_audit, "Читает и обновляет очередь задач\nи статусы", "SQL/TCP 5432")
+
+Rel(worker, ais_osago, "Повторная регистрация полиса\nпри ошибке/таймауте", $tags="пунктир", "HTTPS, JSON, mTLS")
+
+Rel(worker, email_sys, "Отправка электронного полиса\nи уведомлений", $tags="пунктир", "SMTP/STARTTLS 587")
+
+Rel(api, email_sys, "Отправка вопросов и корректировок,\nSMTP/HTTP", "SMTP / HTTPS")
 @enduml
