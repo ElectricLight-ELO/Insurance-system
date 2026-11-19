@@ -1,50 +1,66 @@
 #!/usr/bin/env bash
-# Валидация синтаксиса и рендер всех диаграмм architecture/src -> architecture/docs/images
-# Использование: scripts/render.sh [путь_к_plantuml.jar]
-set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-JAR="${1:-$ROOT/plantuml.jar}"
-export LC_ALL=C.UTF-8
-J=(java -Djava.awt.headless=true -Dfile.encoding=UTF-8 -DPLANTUML_LIMIT_SIZE=16384 -jar "$JAR")
-cd "$ROOT/src"
-mapfile -t FILES < <(find . -name '*.puml' -not -path './core/*' | sed 's#^\./##' | sort)
-mapfile -t DIRS < <(printf '%s\n' "${FILES[@]}" | xargs -n1 dirname | sort -u)
-echo "[INFO] $("${J[@]}" -version 2>/dev/null | head -1)"
+# Рендер C4-диаграмм PlantUML в SVG + PNG.
+set -euo pipefail
+
+JAR="${1:?usage: render.sh <plantuml.jar>}"
+SRC_DIR="src"
+OUT_DIR="docs/images"
+
+# 1. Проверка окружения
+if ! command -v dot >/dev/null 2>&1; then
+  echo "[ERROR] Graphviz 'dot' не найден в PATH." >&2
+  exit 1
+fi
+GRAPHVIZ_DOT="$(command -v dot)"
+echo "[INFO] Graphviz: ${GRAPHVIZ_DOT} ($(dot -V 2>&1))"
+
+if [[ ! -f "$JAR" ]]; then
+  echo "[ERROR] PlantUML jar не найден: $JAR" >&2
+  exit 1
+fi
+
+# 2. Собираем список .puml и заранее готовим каталоги
+mapfile -t FILES < <(find "$SRC_DIR" -type f -name '*.puml' | sort)
 echo "[INFO] Найдено диаграмм: ${#FILES[@]}"
-TMP=$(mktemp -d); FAIL=0
-# --- Этап 1. Валидация синтаксиса = компиляция в PNG (одна JVM на папку) ---
-for d in "${DIRS[@]}"; do
-  mapfile -t DF < <(printf '%s\n' "${FILES[@]}" | awk -F/ -v d="$d" '(d=="." && NF==1) || (d!="." && $1==d)')
-  for f in "${DF[@]}"; do echo "[INFO] Checking PlantUML syntax for src/$f..."; done
-  o="$ROOT/docs/images/$d"; mkdir -p "$o"
-  "${J[@]}" -tpng -o "$o" "${DF[@]}" > "$TMP/out.txt" 2>&1 || true
-  if grep -q "Error line" "$TMP/out.txt"; then
-    FAIL=1
-    grep "Error line" "$TMP/out.txt" | while read -r l; do
-      file=$(echo "$l" | sed 's/.*in file: //'); line=$(echo "$l" | sed 's/Error line \([0-9]*\).*/\1/')
-      echo "[ERROR] Syntax Error in file: src/$file, Line $line"
-      echo "        ----> $(sed -n "${line}p" "$file" 2>/dev/null)"
-      echo "        Error: PlantUML cannot parse this line (незакрытая скобка/кавычка или неизвестный макрос)"
-    done
+
+for f in "${FILES[@]}"; do
+  rel="${f#"$SRC_DIR"/}"
+  out_sub="$(dirname "$rel")"
+  mkdir -p "${OUT_DIR}/${out_sub}"
+  echo "[INFO] Output dir: ${OUT_DIR}/${out_sub}"
+done
+
+# 3. Синтаксическая проверка
+echo "[INFO] Checking PlantUML syntax..."
+java -DGRAPHVIZ_DOT="$GRAPHVIZ_DOT" -jar "$JAR" -checkonly "${FILES[@]}"
+
+# 4. Рендер SVG и PNG
+echo "[INFO] Rendering SVG..."
+java -DGRAPHVIZ_DOT="$GRAPHVIZ_DOT" -jar "$JAR" \
+  -tsvg -nometadata -failfast2 \
+  -o "$(pwd)/${OUT_DIR}" \
+  "${FILES[@]}"
+
+echo "[INFO] Rendering PNG..."
+java -DGRAPHVIZ_DOT="$GRAPHVIZ_DOT" -jar "$JAR" \
+  -tpng -nometadata -failfast2 \
+  -o "$(pwd)/${OUT_DIR}" \
+  "${FILES[@]}"
+
+# 5. Пост-проверка артефактов
+MISSING=0
+for f in "${FILES[@]}"; do
+  rel="${f#"$SRC_DIR"/}"
+  svg="${OUT_DIR}/${rel%.puml}.svg"
+  if [[ ! -s "$svg" ]]; then
+    echo "[ERROR] Artifact missing: ${svg}" >&2
+    MISSING=$((MISSING + 1))
   fi
 done
-if [ $FAIL -ne 0 ]; then
-  echo "Error: process completed with exit code 1."
-  echo "Pipeline failed. Status: CRITICAL FAILURE ❌"; exit 1
+
+if [[ $MISSING -gt 0 ]]; then
+  echo "Pipeline failed. Status: CRITICAL FAILURE ❌ (missing: $MISSING)" >&2
+  exit 1
 fi
-echo "Parsed ${#FILES[@]} files successfully. No structural or syntax errors detected."
-# --- Этап 2. Векторные артефакты SVG и отчёт ---
-echo "Executing Graphviz layout calculation engine..."
-for d in "${DIRS[@]}"; do
-  mapfile -t DF < <(printf '%s\n' "${FILES[@]}" | awk -F/ -v d="$d" '(d=="." && NF==1) || (d!="." && $1==d)')
-  o="$ROOT/docs/images/$d"
-  "${J[@]}" -tsvg -o "$o" "${DF[@]}" >/dev/null 2>&1 || { echo "[ERROR] SVG render failed in src/$d"; FAIL=1; }
-  for f in "${DF[@]}"; do b=$(basename "$f" .puml); p="$o/$b.png"; pre=$( [ "$d" != "." ] && echo "$d/" )
-    if [ -s "$p" ] && [ -s "$o/$b.svg" ]; then
-      echo "Successfully rendered artifact: docs/images/$pre$b.png [Size: $(python3 -c "import struct,sys;d=open(sys.argv[1],'rb').read(24);print('%dx%d'%struct.unpack('>II',d[16:24]))" "$p")] + $b.svg"
-    else echo "[ERROR] Artifact missing: docs/images/$pre$b"; FAIL=1; fi
-  done
-done
-rm -rf "$TMP"
-if [ $FAIL -ne 0 ]; then echo "Pipeline failed. Status: CRITICAL FAILURE ❌"; exit 1; fi
-echo "Job completed with exit code 0. Status: SUCCESS ✅"
+
+echo "[INFO] OK: rendered ${#FILES[@]} diagrams into ${OUT_DIR}"
