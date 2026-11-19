@@ -1,18 +1,8 @@
 @startuml
 !include ../core/C4_Component.puml
-
 LAYOUT_TOP_DOWN()
 
-
-
-
-
 title Web App (React SPA) — компоненты
-
-
-
-
-
 
 Container_Boundary(web_app, "Web App — React SPA") {
   ' --- Маршруты ---
@@ -34,7 +24,7 @@ Container_Boundary(web_app, "Web App — React SPA") {
   Component(l_acc, "AccidentLogic", "React Hooks", "Черновик заявления,\nвалидация полей")
   Component(u_photo, "PhotoUploader", "React Component", "Превью; проверка\nформата и размера", $tags="changed")
   Component(l_exp, "ExpertCasesLogic", "React Hooks", "Список дел,\nфильтры, статусы", $tags="changed")
-  Component(l_insp, "InspectionLogic", "React Hooks", "Сбор результатов; оценка\nущерба по категории", $tags="changed")
+  Component(l_insp, "InspectionLogic", "React Hooks", "Сбор результатов;\nвыплату не считает", $tags="changed")
   Component(u_sig, "SignaturePad", "React Component", "Канвас для\nэлектронной подписи")
   ' --- API-клиенты ---
   Component(a_auth, "AuthApiClient", "TypeScript", "Вход по коду,\nобновление токена", $tags="changed")
@@ -45,13 +35,7 @@ Container_Boundary(web_app, "Web App — React SPA") {
   Component(http, "HttpClient", "axios", "Токен в каждом запросе,\n401/403, повторы", $tags="changed")
 }
 
-Container_Boundary(api, "API (FastAPI)") {
-  Component(auth_comp, "AuthController", "FastAPI Router", "Вход по одноразовому коду")
-  Component(policy_comp, "PolicyController", "FastAPI Router", "Расчёт и оформление")
-  Component(payment_comp, "PaymentController", "FastAPI Router", "Создание платёжной сессии")
-  Component(accident_comp, "AccidentController", "FastAPI Router", "Заявления о ДТП")
-  Component(inspection_comp, "InspectionController", "FastAPI Router", "Результаты осмотра")
-}
+Container_Ext(api, "API", "FastAPI", "REST/HTTPS JSON — расчет премии, оформление,\nоплата, RBAC, фиксация ДТП, администрирование,\nтарифы, финансовый контроль, выдача PDF")
 
 Rel(rt, p_calc, "Открывает страницу по роли", "TypeScript / React")
 Rel(rt, p_buy, "Открывает страницу по роли", "TypeScript / React")
@@ -63,11 +47,11 @@ Rel(rt, p_disp, "Открывает страницу по роли", "TypeScript
 Rel(rt, p_exp, "Открывает страницу по роли", "TypeScript / React")
 Rel(rt, p_insp, "Открывает страницу по роли", "TypeScript / React")
 Rel(rt, l_auth, "Проверка роли", "TypeScript / React", $tags="rbac")
-Rel(p_calc, l_pol, "Запускает операцию с полисом", "TypeScript / React")
-Rel(p_buy, l_pol, "Запускает операцию с полисом", "TypeScript / React")
-Rel(p_cab, l_pol, "Запускает операцию с полисом", "TypeScript / React")
-Rel(p_agent, l_pol, "Запускает операцию с полисом", "TypeScript / React")
-Rel(p_mgr, l_pol, "Запускает операцию с полисом", "TypeScript / React")
+Rel(p_calc, l_pol, "Запрашивает расчёт стоимости", "TypeScript / React")
+Rel(p_buy, l_pol, "Оформляет и оплачивает полис", "TypeScript / React")
+Rel(p_cab, l_pol, "Загружает полис", "TypeScript / React")
+Rel(p_agent, l_pol, "Оформляет полис для клиента", "TypeScript / React")
+Rel(p_mgr, l_pol, "Загружает отчёты по полисам", "TypeScript / React")
 Rel(p_acc, l_acc, "Обрабатывает заявление о ДТП", "TypeScript / React")
 Rel(p_acc, u_form, "Открывает форму заявления", "TypeScript / React")
 Rel(p_disp, l_acc, "Обрабатывает заявление о ДТП", "TypeScript / React")
@@ -84,29 +68,7 @@ Rel(a_auth, http, "Передаёт параметры HTTP-запроса", "Ty
 Rel(a_pol, http, "Передаёт параметры HTTP-запроса", "TypeScript / React")
 Rel(a_acc, http, "Передаёт параметры HTTP-запроса", "TypeScript / React")
 Rel(a_insp, http, "Передаёт параметры HTTP-запроса", "TypeScript / React")
-Rel(http, l_auth, "Берет токен", "TypeScript / React", $tags="rbac")
-Rel(http, auth_comp, "Авторизует пользователя", "REST/HTTPS, JSON")
-Rel(http, policy_comp, "Рассчитывает и оформляет полис", "REST/HTTPS, JSON")
-Rel(http, payment_comp, "Открывает платёжную сессию", "REST/HTTPS, JSON")
-Rel(http, accident_comp, "Передаёт заявление о ДТП", "REST/HTTPS, JSON")
-Rel(http, inspection_comp, "Передаёт результаты осмотра", "REST/HTTPS, JSON")
+Rel(http, l_auth, "Получает токен", "TypeScript / React", $tags="rbac")
+Rel(http, api, "Расчет, оформление, оплата,\nрезультаты осмотра, скачивание полиса", "REST/HTTPS, JSON")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-SHOW_LEGEND()
 @enduml

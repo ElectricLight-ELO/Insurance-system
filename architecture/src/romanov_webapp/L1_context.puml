@@ -1,25 +1,32 @@
 @startuml
 !include ../core/C4_Context.puml
-title L1. ИС ОСАГО — контур продажи и оформления полисов
-Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="outsider")
-Person(client, "Клиент", "Рассчитывает, оформляет и получает полис", $tags="staff")
-Person(payer, "Застрахованный клиент", "Застрахованное лицо,\nсовершающее оплату полиса", $tags="outsider")
-Person(agent, "Страховой агент", "Оформляет полисы, работает с клиентами,\nпередает данные по комиссии (КВ)", $tags="staff")
-Person(manager, "Менеджер отдела продаж", "Контроль работы агентов,\nотчеты по продажам, утверждение сложных случаев", $tags="staff")
-System(osago, "ИС ОСАГО", "Рассчитывает стоимость, оформляет, регистрирует и выдаёт электронный полис")
-System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="ext")
-System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС, водителей и полиса,\nрегистрация договоров, актуальные тарифы", $tags="ext")
-System_Ext(payment_sys, "Платежная система", "Платежные сессии, webhook об оплате,\nпоступления, комиссии, сверка платежей", $tags="ext")
-System_Ext(email_sys, "E-mail система", "Рассылка и обмен письмами: полисы, чеки, протоколы,\nсчета, акты, отчеты, уведомления о сбоях", $tags="ext")
+
+LAYOUT_TOP_DOWN()
+title ИС ОСАГО — локальная диаграмма контекста (L1): продажа и оформление полисов (Романов Н.И.)
+
+Person(guest, "Гость", "Рассчитывает стоимость\nполиса без входа", $tags="outsider")
+Person(client, "Клиент", "Оформляет полис,\nличный кабинет", $tags="staff")
+Person(agent, "Страховой агент", "Оформляет полисы\nза клиентов", $tags="staff")
+Person(manager, "Менеджер отдела продаж", "Контроль агентов,\nсложные случаи", $tags="staff")
+Person(payer, "Застрахованный клиент", "Оплачивает полис", $tags="outsider")
+
+System(osago, "ИС ОСАГО", "Расчёт премии, оформление и\nоплата полиса,\nличный кабинет, рабочие места\nагента и менеджера", $tags="target")
+System_Ext(payment_sys, "Платёжная система", "Платёжная сессия,\nwebhook об оплате", $tags="ext")
+System_Ext(sms_sys, "SMS-шлюз", "Одноразовые коды входа", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Электронный полис и чек", $tags="ext")
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей,\nрегистрация договора", $tags="ext")
+
 Rel(guest, osago, "Рассчитывает стоимость полиса", "HTTPS")
-Rel(client, osago, "Оформляет и скачивает полис", "HTTPS")
-Rel(agent, osago, "Оформляет полисы и договоры для клиентов", "HTTPS")
-Rel(manager, osago, "Открывает отчёты и согласует сложные случаи", "HTTPS")
+Rel(client, osago, "Оформляет полис, скачивает PDF", "HTTPS")
+Rel(agent, osago, "Оформляет полис за клиента", "HTTPS")
+Rel(manager, osago, "Смотрит продажи, утверждает\nсложные случаи", "HTTPS")
+
 Rel(payer, payment_sys, "Оплачивает полис", "HTTPS")
 Rel(osago, payment_sys, "Создаёт платёжную сессию", "HTTPS, JSON")
-Rel(payment_sys, osago, "Передаёт подтверждение оплаты (webhook)", "HTTPS, JSON")
-Rel(osago, ais_osago, "Запрашивает КБМ и регистрирует договор", "HTTPS, mTLS")
+Rel(payment_sys, osago, "Сообщает об оплате (webhook)", "HTTPS, JSON")
 Rel(osago, sms_sys, "Отправляет код входа", "HTTPS, JSON")
-Rel(osago, email_sys, "Передаёт полис и чек для доставки", "SMTP/STARTTLS")
-Rel(email_sys, client, "Доставляет полис и чек", "E-mail")
+Rel(osago, email_sys, "Отправляет полис и чек", "SMTP/STARTTLS 587", $tags="async")
+Rel(osago, ais_osago, "Получает КБМ, проверяет ТС\nи водителей", "HTTPS, JSON, mTLS")
+
+SHOW_LEGEND()
 @enduml
