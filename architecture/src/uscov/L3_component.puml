@@ -1,0 +1,82 @@
+@startuml
+!include ../core/C4_Component.puml
+
+title C4 COMPONENT — API (FastAPI): Модуль бухгалтерии и финансового контроля
+
+Container(web_app, "Web App", "React SPA", "Рабочее место бухгалтера,\nаудитора и фин. менеджера")
+Container(backoffice, "Backoffice", "React SPA", "Рабочее место системного\nадминистратора")
+Container(worker, "Worker", "Python / Celery", "Фоновая обработка задач\nиз очереди outbox")
+
+Container_Boundary(api, "API — FastAPI") {
+
+    Component(auth_comp, "AuthController", "FastAPI Router", "Аутентификация сотрудника:\nпроверка токенов сессии", $tags="layer_api")
+    Component(access_comp, "AccessService", "Python Service", "Проверка прав доступа (RBAC)\nдля бухгалтера и аудитора", $tags="layer_service")
+    Component(margin_comp, "MarginController", "FastAPI Router", "Расчёт маржинальности периода\nи агентских комиссий (КВ)", $tags="layer_api")
+    Component(recon_comp, "ReconciliationController", "FastAPI Router", "Запуск и мониторинг\nсверки зависших платежей", $tags="layer_api")
+    Component(report_comp, "ReportController", "FastAPI Router", "Выгрузка закрывающих\nфинансовых отчетов и актов", $tags="layer_api")
+    Component(admin_comp, "AdminController", "FastAPI Router", "Администрирование пользователей,\nтарифов и журнала аудита", $tags="layer_api")
+
+    Component(margin_service, "MarginService", "Python Service", "Бизнес-логика расчета маржи,\nвыплаты КВ и событий аудита", $tags="layer_service")
+    Component(recon_service, "ReconciliationService", "Python Service", "Бизнес-логика сверки\nзависших транзакций с банком", $tags="layer_service")
+    Component(audit_comp, "AuditService", "Python Service", "Запись событий аудита\nпо финансовым операциям", $tags="layer_service")
+    
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь outbox для Worker", $tags="layer_integration")
+    Component(bank_gateway, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nзапрос статусов транзакций\nв эквайринге банка", $tags="layer_integration")
+    Component(ais_gateway, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nсверка данных по договорам\nчерез АИС ОСАГО", $tags="layer_integration")
+
+    Component(users_repo, "UserRepository", "SQLAlchemy", "Доступ к пользователям, ролям\nи правам в PostgreSQL", $tags="layer_data")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам\nи ставкам комиссий (КВ)", $tags="layer_data")
+    Component(audit_repo, "AuditRepository", "SQLAlchemy", "Доступ к транзакциям,\nаудиту и очереди в PostgreSQL", $tags="layer_data")
+    Component(files_repo, "FileRepository", "PyMongo", "Доступ к PDF-отчетам\nи актам в MongoDB / GridFS", $tags="layer_data")
+}
+
+ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли,\nправа доступа (RBAC)")
+ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции, аудит,\nочередь задач (outbox)")
+ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты и акты")
+
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка договоров страхования,\nсведения о полисах", $tags="ext")
+System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
+
+Rel(web_app, auth_comp, "Проверка сессии", "REST/HTTPS, JSON")
+Rel(web_app, margin_comp, "Запрос расчета маржи и КВ", "REST/HTTPS, JSON")
+Rel(web_app, recon_comp, "Запуск сверки зависших платежей", "REST/HTTPS, JSON")
+Rel(web_app, report_comp, "Выгрузка финансовых отчетов", "REST/HTTPS, JSON")
+Rel(backoffice, admin_comp, "Администрирование, тарифы, аудит", "REST/HTTPS, JSON")
+
+Rel(auth_comp, access_comp, "Проверка сессии", "Python (in-process)")
+Rel(margin_comp, access_comp, "Проверка прав бухгалтера", "Python (in-process)", $tags="rbac")
+Rel(recon_comp, access_comp, "Проверка прав аудитора", "Python (in-process)", $tags="rbac")
+Rel(report_comp, access_comp, "Проверка прав выгрузки", "Python (in-process)", $tags="rbac")
+Rel(admin_comp, access_comp, "Проверка прав администратора", "Python (in-process)", $tags="rbac")
+
+Rel(margin_comp, margin_service, "Вызов бизнес-логики расчета маржи", "Python (in-process)")
+Rel(recon_comp, recon_service, "Вызов бизнес-логики сверки", "Python (in-process)")
+Rel(admin_comp, audit_comp, "Просмотр журнала аудита", "Python (in-process)", $tags="audit")
+
+Rel(margin_service, tariff_repo, "Чтение тарифных ставок и КВ", "Python (in-process)")
+Rel(margin_service, audit_repo, "Чтение транзакций портфеля", "Python (in-process)")
+Rel(margin_service, ais_gateway, "Сверка данных по договорам", "Python (in-process)")
+Rel(margin_service, task_queue_comp, "Постановка фоновой задачи в outbox", "Python (in-process)")
+Rel(margin_service, audit_comp, "События аудита расчета", "Python (in-process)", $tags="audit")
+
+Rel(recon_service, audit_repo, "Поиск зависших оплат PENDING", "Python (in-process)")
+Rel(recon_service, bank_gateway, "Запрос статуса транзакции", "Python (in-process)")
+Rel(recon_service, audit_comp, "События аудита сверки", "Python (in-process)", $tags="audit")
+
+Rel(report_comp, files_repo, "Выгрузка сгенерированных отчетов", "Python (in-process)")
+
+Rel(auth_comp, users_repo, "Проверка учетных записей", "Python (in-process)")
+Rel(access_comp, users_repo, "Роли и права (RBAC)", "Python (in-process)")
+Rel(bank_gateway, payment_sys, "Запрос статусов платежей", "HTTPS, JSON")
+Rel(ais_gateway, ais_osago, "Проверка полиса в РСА", "HTTPS, JSON, mTLS")
+Rel(task_queue_comp, audit_repo, "Запись задачи в очередь outbox", "Python (in-process)")
+
+Rel(audit_repo, db_audit, "Транзакции, аудит, outbox", "SQL/TCP 5432")
+Rel(tariff_repo, db_tarifs, "Тарифные сетки и КВ", "SQL/TCP 5432")
+Rel(users_repo, db_users, "Пользователи и роли", "SQL/TCP 5432")
+Rel(files_repo, db_files, "PDF-отчеты и акты", "MongoDB/TCP 27017")
+Rel(worker, task_queue_comp, "Выборка задач из очереди\nи обновление статусов", "SQL/TCP 5432")
+
+SHOW_LEGEND()
+@enduml
