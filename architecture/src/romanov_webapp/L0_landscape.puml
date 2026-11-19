@@ -1,0 +1,46 @@
+@startuml
+!include ../core/C4_Context.puml
+
+
+LAYOUT_TOP_DOWN()
+title ИС ОСАГО, продажа полисов. SYSTEM LANDSCAPE (L0) — модуль Web App (клиент, агент, менеджер)
+
+Person(guest, "Гость", "Считает стоимость полиса\nбез регистрации")
+Person(client, "Клиент", "Оформляет полис,\nличный кабинет")
+Person(agent, "Страховой агент", "Оформляет полисы клиентам,\nпередаёт данные о продажах")
+Person(manager, "Менеджер отдела продаж", "Отчёты по продажам,\nагенты, сложные случаи")
+Person(payer, "Застрахованный клиент", "Оплачивает полис")
+
+Enterprise_Boundary(enterprise, "Корпоративная ИТ-инфраструктура страховой компании") {
+  System(mod_sales, "ИС ОСАГО: продажа и оформление полисов (Web App)", "Расчёт премии, оформление и оплата полиса, личный кабинет, рабочие места агента и менеджера", $tags="target")
+  System(iam, "Служба авторизации (IAM)", "Вход по одноразовому коду, RBAC, токены")
+  System(osago_core, "Подсистема расчёта и учёта полисов", "API и Worker: тарифы, полисы, платежи, регистрация договоров, PDF")
+  System(crm, "CRM страховой компании", "Клиенты и лиды агентов, история продаж")
+}
+Boundary(city, "Экосистема Smart City") {
+  System_Ext(city_portal, "Городской портал услуг", "Каталог городских сервисов для граждан", $tags="city")
+  System_Ext(esia, "ЕСИА (Госуслуги)", "Подтверждённая учётная запись гражданина", $tags="city")
+}
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей, регистрация договоров", $tags="ext")
+System_Ext(payment_sys, "Платёжная система", "Платёжные сессии, уведомления об оплате", $tags="ext")
+System_Ext(sms_sys, "SMS-шлюз", "Одноразовые коды входа", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Электронный полис и чек", $tags="ext")
+
+Rel(guest, mod_sales, "Считает стоимость полиса", "HTTPS")
+Rel(client, mod_sales, "Оформляет полис, скачивает его", "HTTPS")
+Rel(agent, mod_sales, "Оформляет полисы, передаёт продажи и КВ", "HTTPS")
+Rel(manager, mod_sales, "Смотрит отчёты по продажам", "HTTPS")
+Rel(city_portal, mod_sales, "Переход гражданина к расчёту полиса (предлагается)", "HTTPS (ссылка с параметрами)")
+Rel(mod_sales, esia, "Вход гражданина через Госуслуги (предлагается)", "HTTPS, OAuth2 / OIDC")
+Rel(mod_sales, iam, "Вход по коду, роль, токен", "HTTPS, JSON, OAuth2")
+Rel(iam, sms_sys, "Отправляет одноразовый код", "HTTPS, JSON")
+Rel(mod_sales, osago_core, "Расчёт, оформление, оплата, PDF полиса, продажи агента", "REST/HTTPS, JSON")
+Rel(mod_sales, crm, "Данные о продажах агента и клиенте", "HTTPS, JSON", $tags="async")
+Rel(osago_core, ais_osago, "КБМ, проверки ТС и водителей, регистрация договора", "HTTPS, JSON, mTLS")
+Rel(osago_core, payment_sys, "Создаёт платёжную сессию", "HTTPS, JSON")
+Rel(payer, payment_sys, "Оплачивает полис", "HTTPS")
+Rel(payment_sys, osago_core, "Уведомляет об оплате (webhook)", "HTTPS, JSON", $tags="async")
+Rel(osago_core, email_sys, "Отправляет полис и чек", "SMTP / STARTTLS", $tags="async")
+Rel(email_sys, client, "Доставляет электронный полис", "E-mail", $tags="async")
+SHOW_LEGEND()
+@enduml
