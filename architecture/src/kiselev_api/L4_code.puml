@@ -1,7 +1,7 @@
 @startuml
 !include ../core/class_style.puml
 
-title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "API (FastAPI)" (Киселев Д.А.)
+title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "API (FastAPI)"
 
 ' =====================================================
 ' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
@@ -63,6 +63,7 @@ package "Слой бизнес-логики: сервисы" {
         + submit_results(inspection: Inspection) -> Inspection
         + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
         + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+        - _check_policy(claim: AccidentClaim) -> bool
         - _audit_event(actor: str, action: str, entity_id: UUID) -> None
     }
 
@@ -238,7 +239,7 @@ InspectionController ..> IInspectionService : "DI"
 
 AccidentService ..> IAccidentRepository : "DI"
 AccidentService ..> AuditService : "DI"
-AccidentService o--> AssignmentStrategy : "агрегация, DI,\nподмена в рантайме"
+AccidentService o--> AssignmentStrategy : "aggregation, DI\nподмена в рантайме"
 
 InspectionService ..> IAccidentRepository : "DI"
 InspectionService ..> IFileRepository : "DI"

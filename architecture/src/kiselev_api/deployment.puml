@@ -1,60 +1,71 @@
 @startuml
-!include ../core/C4_Deployment.puml
+!include ../core/deployment_style.puml
 
-title ИС ОСАГО, фиксация ДТП. Deployment — локальный сегмент модуля аварийного эксперта (Киселев Д.А.)
+title ИС ОСАГО, фиксация ДТП. DEPLOYMENT DIAGRAM — локальный сегмент модуля аварийного эксперта
 
-LAYOUT_TOP_DOWN()
+' === ПЕРИФЕРИЯ И ВНЕШНИЕ СИСТЕМЫ ===
+node "Рабочие места\nдиспетчера, эксперта, клиента\n(браузер)" as workstation
 
-Deployment_Node(workstation, "Рабочие места диспетчера, эксперта и клиента", "ПК / ноутбук, веб-браузер") {
-    Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера и эксперта,\nэлектронная подпись клиента")
+cloud "Интернет" as internet {
+    node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+    node "E-mail система\nвнешний почтовый релей" as email
 }
 
-Deployment_Node(server, "Корпоративный сервер (on-prem)", "Docker host, Linux, 16 CPU / 32 GB") {
-    Deployment_Node(net, "Изолированная docker-сеть 172.20.0.0/16 (bridge)") {
+' === ИНФРАСТРУКТУРА ПРЕДПРИЯТИЯ (ON-PREM) ===
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as server {
 
-        Deployment_Node(nginx_node, "Nginx Reverse Proxy", "Nginx", "Единственная точка входа :443/TCP, TLS 1.2+, HSTS;\nраздача статического бандла Web App,\nбалансировка round-robin с health check")
+    node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
 
-        Deployment_Node(api_cluster, "Кластер API, 2 реплики", "Docker-контейнеры, :8000/TCP") {
-            Container(api, "API", "FastAPI", "REST/HTTPS JSON — регистрация заявлений,\nназначение эксперта, осмотр, проверка полиса ОСАГО,\nвыдача PDF-протокола")
-        }
+        artifact "Nginx Reverse Proxy\n:443, TLS 1.2+\nединственная точка входа" as nginx
 
-        Deployment_Node(worker_cluster, "Узлы Worker, 2 инстанса", "Docker-контейнеры") {
-            Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nгенерация PDF-протокола, рассылка")
-        }
+        artifact "Web App\nстатический бандл React SPA\n(отдаётся Nginx)" as web_bundle
 
-        Deployment_Node(pg_primary, "Сервер PostgreSQL (primary)", "PostgreSQL") {
-            ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права доступа (RBAC)")
-            ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, аудит,\nочередь задач (outbox)")
-        }
+        artifact "API (FastAPI)\nреплика 1\n:8000" as api1
 
-        Deployment_Node(pg_replica, "Сервер PostgreSQL (replica)", "PostgreSQL, hot standby, только чтение")
+        artifact "API (FastAPI)\nреплика 2\n:8000" as api2
 
-        Deployment_Node(mongo_primary, "Сервер MongoDB (primary)", "MongoDB, набор реплик") {
-            ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи,\nPDF-протоколы осмотра")
-        }
+        artifact "Worker (Celery)\nинстанс 1" as worker1
 
-        Deployment_Node(mongo_secondary, "Серверы MongoDB (secondary), 2 экземпляра", "MongoDB, набор реплик")
+        artifact "Worker (Celery)\nинстанс 2" as worker2
+
+        database "DB_AUDIT\nPostgreSQL, Master\n:5432, TLS" as pg_master
+
+        database "DB_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as pg_replica
+
+        database "DB_FILES\nMongoDB, Primary\n:27017, TLS" as mongo_primary
+
+        database "DB_FILES\nMongoDB, Secondary\n:27017" as mongo_secondary
     }
 }
 
-System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договоре", $tags="ext")
-System_Ext(email_sys, "E-mail система", "Доставка протоколов осмотра\nи уведомлений", $tags="ext")
+' === СВЯЗИ: ПОЛЬЗОВАТЕЛИ -> ИНФРАСТРУКТУРА ===
+workstation --> nginx : "HTTPS, TLS 1.2+, HSTS\n:443/TCP"
+nginx --> web_bundle : "отдача статики\n:443/TCP"
 
-Rel(workstation, nginx_node, "Загружает приложение, отправляет заявления,\nрезультаты осмотра, фото и подпись", "HTTPS, TCP 443, TLS 1.2+, HSTS")
-Rel(nginx_node, api, "Reverse proxy: распределяет запросы\nмежду репликами API (round-robin)", "HTTP, TCP 8000")
+' === СВЯЗИ: БАЛАНСИРОВКА И ОТКАЗОУСТОЙЧИВОСТЬ API ===
+nginx --> api1 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
+nginx --> api2 : "reverse proxy\n:8000/TCP, round-robin\n+ health check"
 
-Rel(api, db_users, "Аутентификация, роли диспетчера,\nэксперта и клиента", "SQL, TCP 5432, TLS")
-Rel(api, db_audit, "Запись заявлений, осмотра, аудита,\nзадач в outbox", "SQL, TCP 5432, TLS")
-Rel(api, db_files, "Сохранение фото и подписей,\nвыдача PDF-протокола", "MongoDB, TCP 27017, TLS")
+' === СВЯЗИ: API -> БД ===
+api1 --> pg_master : "SQL/TCP, TLS\n:5432"
+api2 --> pg_master : "SQL/TCP, TLS\n:5432"
+api1 --> mongo_primary : "MongoDB Wire, TLS\n:27017"
+api2 --> mongo_primary : "MongoDB Wire, TLS\n:27017"
 
-Rel(worker, db_audit, "Опрос очереди outbox\nи обновление статусов", "SQL, TCP 5432, TLS")
-Rel(worker, db_files, "Чтение фото и подписей,\nзапись PDF-протоколов", "MongoDB, TCP 27017, TLS")
+' === СВЯЗИ: РЕПЛИКАЦИЯ БД (ОТКАЗОУСТОЙЧИВОСТЬ) ===
+pg_master --> pg_replica : "streaming replication\n:5432/TCP, TLS"
+mongo_primary --> mongo_secondary : "replication\n:27017/TCP, TLS"
 
-Rel(pg_primary, pg_replica, "Потоковая репликация (hot standby)", "SQL, TCP 5432, TLS")
-Rel(mongo_primary, mongo_secondary, "Репликация набора реплик", "MongoDB, TCP 27017, TLS")
+' === СВЯЗИ: WORKER -> БД ===
+worker1 --> pg_master : "опрос очереди outbox\n:5432/TCP, TLS"
+worker2 --> pg_master : "опрос очереди outbox\n:5432/TCP, TLS"
+worker1 --> mongo_primary : "чтение фото,\nзапись PDF :27017/TCP, TLS"
+worker2 --> mongo_primary : "чтение фото,\nзапись PDF :27017/TCP, TLS"
 
-Rel(api, ais_osago, "Проверка наличия полиса ОСАГО\nпри регистрации заявления", "HTTPS, mTLS, TCP 443")
-Rel(worker, email_sys, "Отправка протокола осмотра\nи уведомлений", "SMTPS, TCP 465 / STARTTLS, TCP 587")
+' === СВЯЗИ: ИСХОДЯЩИЕ ВО ВНЕШНИЕ СИСТЕМЫ ===
+api1 --> ais : "HTTPS, mTLS\n(клиентский сертификат)\n:443/TCP"
+api2 --> ais : "HTTPS, mTLS\n(клиентский сертификат)\n:443/TCP"
+worker1 --> email : "SMTPS :465/TCP\nили STARTTLS :587"
+worker2 --> email : "SMTPS :465/TCP\nили STARTTLS :587"
 
-SHOW_LEGEND()
 @enduml
