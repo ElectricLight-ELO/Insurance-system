@@ -1,0 +1,39 @@
+' Рисунок 4.3 — Локальная диаграмма контекста (уровень 1): Worker, финансовый контроль, Усков М.В.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Context>
+skinparam defaultFontName Arial
+AddElementTag("target", $bgColor="#2E86C1", $borderColor="#1F6391", $fontColor="#FFFFFF", $legendText="Целевой модуль разработчика")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("outer", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний пользователь")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title ИС ОСАГО — локальная диаграмма контекста (L1): фоновая обработка и финансовый контроль (Усков М.В.)
+
+Person(accountant, "Бухгалтер", "Маржа, сверка оплат,\nсчета и акты", $tags="staff")
+Person(manager, "Менеджер отдела продаж", "Отчёты по продажам\nи комиссии агентов (КВ)", $tags="staff")
+Person(agent, "Страховой агент", "Получает расчёт\nкомиссионного вознаграждения", $tags="staff")
+
+System(osago, "ИС ОСАГО", "Фоновая обработка: регистрация договоров, PDF,\nсверка платежей, расчёт маржи и КВ, отчёты", $tags="target")
+
+System_Ext(payment, "Платёжная система", "Отчёты о поступлениях,\nкомиссии эквайринга", $tags="ext")
+System_Ext(ais, "АИС ОСАГО (РСА)", "Регистрация договоров ОСАГО", $tags="ext")
+System_Ext(email, "E-mail система", "Рассылка полисов,\nотчётов, счетов и актов", $tags="ext")
+
+Rel_D(accountant, osago, "Запускает расчёт маржи,\nпроверяет сверку оплат", "HTTPS")
+Rel_D(manager, osago, "Смотрит отчёты по продажам и КВ", "HTTPS")
+Rel_D(agent, osago, "Передаёт данные о продажах", "REST/HTTPS, JSON")
+
+Rel_D(osago, payment, "Загружает отчёт о поступлениях\nдля сверки", "HTTPS, JSON", $tags="async")
+Rel_D(osago, ais, "Регистрирует договор после оплаты", "HTTPS, JSON, mTLS", $tags="async")
+Rel_D(osago, email, "Отправляет отчёты, счета и акты", "SMTP/STARTTLS 587", $tags="async")
+
+Lay_R(accountant, manager)
+Lay_R(manager, agent)
+Lay_R(payment, ais)
+Lay_R(ais, email)
+
+SHOW_LEGEND()
+@enduml

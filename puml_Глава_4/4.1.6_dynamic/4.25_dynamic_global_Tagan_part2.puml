@@ -1,0 +1,45 @@
+' Рисунок 4.25 — Глобальная динамическая диаграмма: сквозной процесс ИС ОСАГО, Таган А.М. — часть 2 из 4 (б)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 300
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Глобальная динамическая диаграмма ИС ОСАГО — сквозной процесс всех модулей (сборка тимлида Таган А.М.)\nЧасть 2 из 4: фаза Б — фиксация ДТП и осмотр, шаги 18–30
+
+Person(client, "Клиент / агент", "Полис, подпись протокола", $tags="staff")
+Person(dispexp, "Диспетчер и эксперт", "ДТП и осмотр", $tags="staff")
+
+System_Boundary(osago, "ИС ОСАГО") {
+    Container(web_app, "Web App", "React SPA", "Романов Н.И.: CalculatorPage, CheckoutPage, AccidentPage, InspectionPage → *ApiClient → HttpClient")
+    Container(api, "API", "FastAPI", "Киселев Д.А.: Auth/Policy/Payment/Accident/Inspection/AdminController → сервисы → фасады и репозитории")
+    Container(worker, "Worker", "Python / Celery", "Усков М.В.: OutboxPoller, Scheduler → задачи Celery → сервисы")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, акты ДТП, очередь задач (outbox)")
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото, подписи, PDF")
+}
+System_Ext(ais, "АИС ОСАГО (РСА)", "КБМ, проверка полиса, регистрация договоров", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка документов и отчётов", $tags="ext")
+
+
+' ===== Фаза Б — Киселев Д.А., API: заявление о ДТП, осмотр, подпись, PDF-протокол =====
+setIndex(18)
+Rel(dispexp, web_app, "Регистрирует заявление, назначает эксперта, вносит осмотр", "HTTPS")
+Rel(web_app, api, "POST /api/claims — register_claim() [AccidentController → AccidentService]", "REST/HTTPS, JSON")
+Rel(api, ais, "check_policy(claim) [AisOsagoFacade]", "HTTPS, JSON, mTLS")
+Rel(api, db_audit, "save_claim(); assign_expert() [AccidentRepository]", "SQL/TCP 5432")
+Rel(web_app, api, "POST /api/claims/{id}/inspection, /photos — submit_results(), upload_photos() [InspectionController → InspectionService]", "REST/HTTPS, multipart")
+Rel(api, db_files, "save_photos() [FileRepository]; save_inspection() [AccidentRepository]", "MongoDB/TCP 27017 / SQL/TCP 5432")
+Rel(client, web_app, "Подписывает протокол осмотра (SignaturePad)", "HTTPS")
+Rel(web_app, api, "POST /api/claims/{id}/signature — accept_signature()", "REST/HTTPS, JSON")
+Rel(api, db_files, "save_signature() [FileRepository]", "MongoDB/TCP 27017")
+Rel(api, db_audit, "save_task(PDF_PROTOCOL); save_audit() [TaskQueueFacade, AuditService]", "SQL/TCP 5432")
+Rel(worker, db_audit, "list_pending_tasks(): PDF_PROTOCOL [OutboxPoller]", "SQL/TCP 5432", $tags="async")
+Rel(worker, db_files, "generate_protocol_pdf() → save_pdf() [PdfTask → DocumentService]", "MongoDB/TCP 27017", $tags="async")
+Rel(worker, email, "send_mail(протокол осмотра) [NotificationTask → EmailFacade]", "SMTP/STARTTLS 587", $tags="async")
+
+SHOW_LEGEND()
+@enduml

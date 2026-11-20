@@ -1,0 +1,97 @@
+' Рисунок 4.7 — Диаграмма контейнеров (уровень 2): контур клиента и поддержки, Таган А.М.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Container>
+
+title Информационная система оформления ОСАГО (ИС ОСАГО). Container
+
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("гость_серый", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddRelTag("пунктир", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+
+Person(guest, "Гость", "Неавторизованный посетитель,\nрассчитывает стоимость полиса", $tags="гость_серый")
+Person(client, "Клиент", "Страхователь: оформляет и\nоплачивает полис")
+Person(support, "Оператор поддержки", "Отслеживает статусы полисов и платежей,\nперезапускает зависшие задачи")
+
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+
+    Container(web_app, "Web App", "React SPA", "Расчет, оформление, оплата,\nличный кабинет клиента")
+
+    Container(backoffice, "Backoffice", "React SPA", "Поиск полисов, статусы платежей,\nручной перезапуск задач")
+
+    Container(api, "API", "FastAPI", "Расчет премии, оформление, оплата,\nавторизация, ролевой доступ,\nвыдача PDF полиса")
+
+    ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права доступа (RBAC),\nклиенты, номера полисов")
+
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Журнал событий аудита, транзакции, платежи,\nочередь асинхронных задач (outbox)")
+
+    ContainerDb(bd_files, "BD_FILES", "MongoDB", "Фото, подписи и файлы документов\n(PDF полисов)")
+
+    Container(worker, "Worker", "Python", "Фоновая обработка: PDF, регистрация\nдоговора, отправка писем, сверка платежей")
+}
+
+
+System_Ext(payment_sys, "Платежная система", "Проведение платежей", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail сервис", "Почтовый сервис рассылки", $tags="внешняя_система")
+System_Ext(ais_osago, "АИС ОСАГО (РСА)", "КБМ, проверка ТС и водителей,\nрегистрация договоров", $tags="внешняя_система")
+System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="внешняя_система")
+
+
+
+
+Rel(guest, web_app, "Рассчитывает стоимость\nбез регистрации", "HTTPS")
+Rel(client, web_app, "Вводит данные, загружает фото,\nоплачивает, скачивает полис", "HTTPS")
+Rel(support, backoffice, "Ищет полисы, смотрит статусы,\nперезапускает задачи", "HTTPS")
+
+
+Rel(web_app, api, "Расчет, оформление, оплата,\nскачивание полиса", "REST/HTTPS, JSON")
+Rel(backoffice, api, "Поиск полисов,\nуправление задачами", "REST/HTTPS, JSON")
+
+
+Rel(api, db_users, "Читает и записывает данные клиентов,\nролей и полисов", "SQL")
+Rel(api, db_audit, "Записывает события аудита и транзакции,\nставит задачи в outbox (с полным payload)", "SQL")
+Rel(api, bd_files, "Сохраняет и читает фото и подписи,\nчитает PDF для выдачи по ссылке", "MongoDB driver")
+
+
+Rel(api, sms_sys, "Отправляет одноразовый код\nдля авторизации клиента", "HTTPS, JSON")
+Rel(api, payment_sys, "Создает платежную сессию", "HTTPS, JSON")
+Rel(payment_sys, api, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
+Rel(api, ais_osago, "Запрашивает КБМ, проверяет\nТС и водителей", "HTTPS, JSON")
+
+
+Rel(worker, db_audit, "Забирает задачи из outbox в статусах\nnew/pending, обновляет статусы,\nсверяет оплаты без задач", "SQL")
+Rel(worker, bd_files, "Читает фото и подписи,\nсохраняет PDF полиса", "MongoDB driver")
+
+
+Rel(worker, ais_osago, "Регистрирует договор после оплаты\n(повтор при ошибке/таймауте)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, payment_sys, "Сверяет зависшие платежи\n(по расписанию)", "HTTPS, JSON", $tags="пунктир")
+Rel(worker, email_sys, "Отправляет клиенту письмо со ссылкой\nна полис и чек (повтор при сбое)", "SMTP / HTTPS", $tags="пунктир")
+
+
+
+
+guest -[hidden]right- client
+client -[hidden]right- support
+
+
+client -[hidden]down- web_app
+support -[hidden]down- backoffice
+web_app -[hidden]right- backoffice
+
+
+web_app -[hidden]down- api
+api -[hidden]right- db_users
+db_users -[hidden]right- db_audit
+db_audit -[hidden]right- bd_files
+bd_files -[hidden]right- worker
+
+
+osago_service -[hidden]down- payment_sys
+payment_sys -[hidden]right- email_sys
+email_sys -[hidden]right- ais_osago
+ais_osago -[hidden]right- sms_sys
+
+@enduml

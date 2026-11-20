@@ -1,0 +1,42 @@
+' Рисунок 4.4 — Локальная диаграмма контекста (уровень 1): Backoffice, администрирование и аудит, Мехова А.С.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Context>
+skinparam defaultFontName Arial
+AddElementTag("target", $bgColor="#2E86C1", $borderColor="#1F6391", $fontColor="#FFFFFF", $legendText="Целевой модуль разработчика")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("outer", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний пользователь")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title ИС ОСАГО — локальная диаграмма контекста (L1): администрирование и аудит (Мехова А.С.)
+
+Person(admin, "Администратор", "Пользователи, роли,\nтарифы, задачи", $tags="staff")
+Person(support, "Оператор поддержки", "Поиск полисов и платежей,\nперезапуск сбойных задач", $tags="staff")
+Person(security, "Сотрудник ИБ", "Журнал аудита,\nрасследование инцидентов", $tags="staff")
+Person(accountant, "Бухгалтер", "Финансовые отчёты,\nсчета и акты", $tags="staff")
+
+System(osago, "ИС ОСАГО", "Администрирование пользователей и тарифов,\nуправление задачами, журнал аудита, отчёты", $tags="target")
+
+System_Ext(ais, "АИС ОСАГО (РСА)", "Повторная регистрация договора\nпо команде администратора", $tags="ext")
+System_Ext(email, "E-mail система", "Отчёты, счета, акты,\nуведомления о сбоях", $tags="ext")
+System_Ext(sms, "SMS-шлюз", "Коды входа сотрудников", $tags="ext")
+
+Rel_D(admin, osago, "Управляет пользователями,\nролями и тарифами", "HTTPS")
+Rel_D(support, osago, "Ищет полисы, перезапускает задачи", "HTTPS")
+Rel_D(security, osago, "Просматривает и выгружает\nжурнал аудита", "HTTPS")
+Rel_D(accountant, osago, "Формирует финансовые отчёты", "HTTPS")
+
+Rel_D(osago, ais, "Регистрирует договор\nпосле перезапуска задачи", "HTTPS, JSON, mTLS", $tags="async")
+Rel_D(osago, email, "Рассылает отчёты и уведомления о сбоях", "SMTP/STARTTLS 587", $tags="async")
+Rel_D(osago, sms, "Отправляет код входа", "HTTPS, JSON")
+
+Lay_R(admin, support)
+Lay_R(support, security)
+Lay_R(security, accountant)
+Lay_R(ais, email)
+Lay_R(email, sms)
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,89 @@
+' Рисунок 4.12 — Диаграмма компонентов контейнера API (C4, уровень 3), Киселев Д.А. — нижняя часть (б)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_LEFT_RIGHT()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title API (FastAPI) — компоненты (C4, уровень 3), Киселев Д.А.\nЧасть 2 из 2 (нижняя): сервисы, фасады внешних систем, репозитории и хранилища
+
+
+Container_Boundary(api, "API — FastAPI") {
+    ' --- Сервисы (бизнес-правила) ---
+    Component(access_comp, "AccessService", "Python, Strategy", "Выпуск токена и проверка прав (RBAC)", $tags="changed")
+    Component(policy_svc, "PolicyService", "Python", "Расчёт премии, КБМ, сохранение полиса", $tags="changed")
+    Component(payment_svc, "PaymentService", "Python", "Платёжная сессия, обработка webhook", $tags="changed")
+    Component(accident_svc, "AccidentService", "Python", "Заявление, проверка полиса, назначение эксперта", $tags="changed")
+    Component(inspection_svc, "InspectionService", "Python", "Акт осмотра, подпись, задача на PDF")
+    Component(admin_svc, "AdminService", "Python", "Учётные записи, тарифы, финансы, вопросы клиентам", $tags="changed")
+    Component(audit_comp, "AuditService", "Python", "Запись событий аудита по каждому действию")
+    ' --- Фасады внешних систем и очереди ---
+    Component(ais_facade, "AisOsagoFacade", "HTTP Client", "КБМ, ТС, водители, наличие полиса")
+    Component(sms_facade, "SmsGatewayFacade", "HTTP Client", "Отправка кода", $tags="changed")
+    Component(payment_facade, "PaymentGatewayFacade", "HTTP Client", "Сессии, отчёты о поступлениях", $tags="changed")
+    Component(email_facade, "EmailFacade", "SMTP Client", "Вопросы и корректировки", $tags="changed")
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Задачи в очередь (outbox) для Worker")
+    ' --- Репозитории ---
+    Component(user_repo, "UserRepository", "SQLAlchemy", "Пользователи, роли, клиенты, полисы", $tags="changed")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Тарифы, лог отчётов", $tags="changed")
+    Component(accident_repo, "AccidentRepository", "SQLAlchemy", "Заявления, акты, транзакции, аудит и очередь")
+    Component(file_repo, "FileRepository", "PyMongo", "Фото, подписи, PDF")
+}
+
+ContainerDb_Ext(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, права (RBAC), клиенты, номера полисов", $tags="ext")
+ContainerDb_Ext(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки, коэффициенты, правила расчёта, результаты маржи", $tags="ext")
+ContainerDb_Ext(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, платежи, акты ДТП, очередь задач (outbox)", $tags="ext")
+ContainerDb_Ext(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи, документы (PDF полисов и протоколов)", $tags="ext")
+Container_Ext(worker, "Worker", "Python / Celery", "Фоновая обработка: PDF, регистрация договора, письма, сверка платежей, расчёт маржи, отчёты", $tags="ext")
+System_Ext(ais_sys, "АИС ОСАГО (РСА)", "КБМ, проверка ТС, водителей и полиса, регистрация договоров", $tags="ext")
+System_Ext(sms_sys, "SMS-шлюз", "Отправка одноразовых кодов", $tags="ext")
+System_Ext(payment_sys, "Платёжная система", "Платёжные сессии, поступления, комиссии, сверка", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Рассылка и обмен письмами", $tags="ext")
+
+Rel(access_comp, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(policy_svc, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(payment_svc, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(accident_svc, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(inspection_svc, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(admin_svc, audit_comp, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(access_comp, sms_facade, "Вызывает внешний шлюз", "Python call")
+Rel(access_comp, user_repo, "Читает пользователя и роли", "Python call")
+Rel(policy_svc, ais_facade, "Запрашивает КБМ, проверяет ТС и водителей", "Python call")
+Rel(policy_svc, tariff_repo, "Получает коэффициенты тарифа", "Python call")
+Rel(policy_svc, user_repo, "Сохраняет полис", "Python call")
+Rel(payment_svc, payment_facade, "Вызывает внешний шлюз", "Python call")
+Rel(payment_svc, accident_repo, "Сохраняет транзакцию", "Python call")
+Rel(payment_svc, task_queue_comp, "Ставит задачу в очередь outbox", "Python call")
+Rel(accident_svc, ais_facade, "Проверяет действие полиса", "Python call")
+Rel(accident_svc, accident_repo, "Читает и сохраняет данные", "Python call")
+Rel(inspection_svc, file_repo, "Сохраняет фото и подписи", "Python call")
+Rel(inspection_svc, accident_repo, "Читает и сохраняет данные", "Python call")
+Rel(inspection_svc, task_queue_comp, "Ставит задачу в очередь outbox", "Python call")
+Rel(admin_svc, user_repo, "Читает и сохраняет данные", "Python call")
+Rel(admin_svc, tariff_repo, "Читает и сохраняет данные", "Python call")
+Rel(admin_svc, accident_repo, "Читает журнал аудита", "Python call")
+Rel(admin_svc, task_queue_comp, "Ставит задачу в очередь outbox", "Python call")
+Rel(admin_svc, payment_facade, "Вызывает внешний шлюз", "Python call")
+Rel(admin_svc, email_facade, "Вызывает внешний шлюз", "Python call")
+Rel(audit_comp, accident_repo, "Читает и сохраняет данные", "Python call")
+Rel(task_queue_comp, accident_repo, "Записывает задачу в outbox", "Python call")
+Rel(user_repo, db_users, "Аутентификация, пользователи, роли, клиенты, полисы", "SQL/TCP 5432")
+Rel(tariff_repo, db_tarifs, "Чтение и изменение тарифов, запись лога отчётов", "SQL/TCP 5432")
+Rel(accident_repo, db_audit, "Аудит, транзакции, акты ДТП, задачи в outbox", "SQL/TCP 5432")
+Rel(file_repo, db_files, "Фото, подписи, документы; выдача PDF по ссылке", "MongoDB/TCP 27017")
+Rel_R(db_audit, worker, "Worker забирает задачи из outbox", "SQL/TCP 5432", $tags="async")
+Rel(ais_facade, ais_sys, "Запрашивает КБМ и тарифы, проверяет ТС, водителей и наличие полиса", "HTTPS, JSON, mTLS")
+Rel(sms_facade, sms_sys, "Отправляет одноразовый код для авторизации", "HTTPS, JSON")
+Rel(payment_facade, payment_sys, "Создаёт платёжную сессию, получает отчёты о поступлениях", "HTTPS, JSON")
+Rel(email_facade, email_sys, "Отправляет вопросы и корректировки", "SMTP/STARTTLS 587", $tags="async")
+
+
+SHOW_LEGEND()
+@enduml

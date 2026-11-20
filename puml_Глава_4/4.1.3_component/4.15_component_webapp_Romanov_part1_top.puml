@@ -1,0 +1,68 @@
+' Рисунок 4.15 — Диаграмма компонентов контейнера Web App (C4, уровень 3), Романов Н.И. — верхняя часть (а)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title Web App (React SPA) — компоненты (C4, уровень 3), Романов Н.И.\nЧасть 1 из 2 (верхняя): маршрутизатор, страницы и логика
+
+
+Container_Boundary(web_app, "Web App — React SPA") {
+    ' --- Маршрутизатор ---
+    Component(app_router, "AppRouter", "React Router", "Защита страниц по роли: гость, клиент, агент, менеджер, диспетчер, эксперт", $tags="changed")
+    ' --- Страницы ---
+    Component(calculator_page, "CalculatorPage", "React Page", "Расчёт стоимости (в т.ч. для гостя)", $tags="changed")
+    Component(checkout_page, "CheckoutPage", "React Page", "Оформление и оплата полиса", $tags="changed")
+    Component(cabinet_page, "CabinetPage", "React Page", "Личный кабинет, скачивание полиса", $tags="changed")
+    Component(agent_workplace, "AgentWorkplace", "React Page", "Оформление полисов и договоров агентом", $tags="changed")
+    Component(manager_workplace, "ManagerWorkplace", "React Page", "Отчёты, агенты, сложные случаи", $tags="changed")
+    Component(accident_page, "AccidentPage", "React Page", "Регистрация заявления о ДТП")
+    Component(dispatcher_page, "DispatcherPage", "React Page", "Заявление по звонку, назначение эксперта", $tags="changed")
+    Component(expert_dashboard, "ExpertDashboard", "React Page", "Назначенные эксперту дела")
+    Component(inspection_page, "InspectionPage", "React Page", "Осмотр, фото, подписание акта")
+    ' --- Логика и общие компоненты ---
+    Component(auth_logic, "AuthLogic", "React Context", "Токен и роль пользователя")
+    Component(policy_logic, "PolicyLogic", "React Hooks", "Расчёт, оформление, полисы и отчёты", $tags="changed")
+    Component(form_wizard, "FormWizard", "React Component", "Пошаговая форма ввода данных ДТП")
+    Component(accident_logic, "AccidentLogic", "React Hooks", "Черновик заявления, валидация полей")
+    Component(expert_cases_logic, "ExpertCasesLogic", "React Hooks", "Список дел, фильтры, статусы", $tags="changed")
+    Component(inspection_logic, "InspectionLogic", "React Hooks", "Сбор результатов; выплату не считает", $tags="changed")
+    Component(signature_pad, "SignaturePad", "React Component", "Канвас для электронной подписи")
+    Component(photo_uploader, "PhotoUploader", "React Component", "Превью; проверка формата и размера", $tags="changed")
+}
+
+
+Rel(app_router, calculator_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, checkout_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, cabinet_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, agent_workplace, "Открывает страницу", "TypeScript call")
+Rel(app_router, manager_workplace, "Открывает страницу", "TypeScript call")
+Rel(app_router, accident_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, dispatcher_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, expert_dashboard, "Открывает страницу", "TypeScript call")
+Rel(app_router, inspection_page, "Открывает страницу", "TypeScript call")
+Rel(app_router, auth_logic, "Проверка роли", "TypeScript call", $tags="rbac")
+Rel(calculator_page, policy_logic, "Вызывает расчёт", "TypeScript call")
+Rel(checkout_page, policy_logic, "Оформление и оплата", "TypeScript call")
+Rel(cabinet_page, policy_logic, "Список и PDF полисов", "TypeScript call")
+Rel(agent_workplace, policy_logic, "Оформление за клиента", "TypeScript call")
+Rel(manager_workplace, policy_logic, "Отчёты по продажам", "TypeScript call")
+Rel(accident_page, form_wizard, "Пошаговый ввод", "TypeScript call")
+Rel(accident_page, accident_logic, "Черновик заявления", "TypeScript call")
+Rel(dispatcher_page, accident_logic, "Заявление, назначение", "TypeScript call")
+Rel(expert_dashboard, expert_cases_logic, "Список дел", "TypeScript call")
+Rel(inspection_page, inspection_logic, "Результаты осмотра", "TypeScript call")
+Rel(inspection_page, signature_pad, "Подпись клиента", "TypeScript call")
+Rel(inspection_page, photo_uploader, "Загрузка фото", "TypeScript call")
+
+
+SHOW_LEGEND()
+@enduml

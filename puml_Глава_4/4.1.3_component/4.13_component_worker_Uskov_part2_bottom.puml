@@ -1,0 +1,73 @@
+' Рисунок 4.13 — Диаграмма компонентов контейнера Worker (C4, уровень 3), Усков М.В. — нижняя часть (б)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_LEFT_RIGHT()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title Worker (Python / Celery) — компоненты (C4, уровень 3), Усков М.В.\nЧасть 2 из 2 (нижняя): сервисы, фасады внешних систем, репозитории и хранилища
+
+
+Container_Boundary(worker, "Worker — Python / Celery") {
+    ' --- Сервисы ---
+    Component(contract_svc, "ContractService", "Python", "Регистрация договора в АИС после оплаты", $tags="changed")
+    Component(notification_svc, "NotificationService", "Python", "Шаблоны писем и вложения", $tags="changed")
+    Component(document_svc, "DocumentService", "Python", "Сборка PDF, очистка файлов", $tags="changed")
+    Component(margin_svc, "MarginService", "Python", "Агрегация, расчёт маржи и КВ")
+    Component(report_svc, "ReportService", "Python", "Отчёты по марже, счета и акты", $tags="changed")
+    Component(reconciliation_svc, "ReconciliationService", "Python", "Сопоставление поступлений")
+    Component(audit_svc, "AuditService", "Python", "Статусы задач и логи")
+    ' --- Фасады внешних систем ---
+    Component(ais_facade, "AisOsagoFacade", "HTTP Client", "Регистрация договора, проверка полиса", $tags="changed")
+    Component(email_facade, "EmailFacade", "SMTP Client", "Полисы, чеки, счета, отчёты, уведомления", $tags="changed")
+    Component(payment_facade, "PaymentGatewayFacade", "HTTP Client", "Статусы платежей")
+    ' --- Репозитории ---
+    Component(file_repo, "FileRepository", "PyMongo", "Фото, подписи, PDF", $tags="changed")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Данные для расчёта, результаты маржи", $tags="changed")
+    Component(transaction_repo, "TransactionRepository", "SQLAlchemy", "Транзакции, платежи, КВ", $tags="changed")
+    Component(audit_repo, "AuditRepository", "SQLAlchemy", "Outbox, статусы задач, аудит")
+}
+
+ContainerDb_Ext(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, платежи, акты ДТП, очередь задач (outbox)", $tags="ext")
+ContainerDb_Ext(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки, коэффициенты, результаты расчёта маржи", $tags="ext")
+ContainerDb_Ext(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи, документы (PDF полисов и протоколов)", $tags="ext")
+System_Ext(ais_sys, "АИС ОСАГО (РСА)", "КБМ, проверка ТС, водителей и полиса, регистрация договоров", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Рассылка писем: полисы, чеки, протоколы, счета, акты, отчёты", $tags="ext")
+System_Ext(payment_sys, "Платёжная система", "Платёжные сессии, поступления, комиссии, сверка", $tags="ext")
+
+Rel(contract_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(notification_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(document_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(margin_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(report_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(reconciliation_svc, audit_svc, "Записывает событие аудита", "Python call", $tags="audit")
+Rel(contract_svc, ais_facade, "Вызывает внешний шлюз", "Python call")
+Rel(contract_svc, transaction_repo, "Читает данные полиса и оплаты", "Python call")
+Rel(notification_svc, email_facade, "Вызывает внешний шлюз", "Python call")
+Rel(notification_svc, file_repo, "Читает вложения (PDF)", "Python call")
+Rel(document_svc, file_repo, "Читает фото и подписи, сохраняет и удаляет PDF", "Python call")
+Rel(margin_svc, transaction_repo, "Читает транзакции за период", "Python call")
+Rel(margin_svc, tariff_repo, "Читает коэффициенты, записывает результат маржи", "Python call")
+Rel(report_svc, tariff_repo, "Читает результаты маржи", "Python call")
+Rel(report_svc, email_facade, "Вызывает внешний шлюз", "Python call")
+Rel(reconciliation_svc, payment_facade, "Вызывает внешний шлюз", "Python call")
+Rel(reconciliation_svc, transaction_repo, "Обновляет статусы зависших платежей", "Python call")
+Rel(audit_svc, audit_repo, "Статусы выполнения задач", "Python call")
+Rel(ais_facade, ais_sys, "Регистрирует договор после оплаты (в т.ч. по команде администратора), повторная проверка полиса", "HTTPS, JSON, mTLS", $tags="async")
+Rel(email_facade, email_sys, "Отправляет полисы, чеки, протоколы, счета, отчёты, уведомления о сбоях", "SMTP/STARTTLS 587", $tags="async")
+Rel(payment_facade, payment_sys, "Сверяет зависшие платежи (по расписанию)", "HTTPS, JSON", $tags="async")
+Rel(file_repo, db_files, "Читает фото и подписи, сохраняет PDF, удаляет устаревшие файлы", "MongoDB/TCP 27017")
+Rel(tariff_repo, db_tarifs, "Читает данные для расчёта, записывает результаты маржи", "SQL/TCP 5432")
+Rel(transaction_repo, db_audit, "Читает и записывает транзакции", "SQL/TCP 5432")
+Rel(audit_repo, db_audit, "Обновляет статусы задач, пишет аудит", "SQL/TCP 5432")
+
+
+SHOW_LEGEND()
+@enduml

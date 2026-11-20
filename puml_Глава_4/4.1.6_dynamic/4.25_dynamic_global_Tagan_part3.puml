@@ -1,0 +1,39 @@
+' Рисунок 4.25 — Глобальная динамическая диаграмма: сквозной процесс ИС ОСАГО, Таган А.М. — часть 3 из 4 (в)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 300
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Глобальная динамическая диаграмма ИС ОСАГО — сквозной процесс всех модулей (сборка тимлида Таган А.М.)\nЧасть 3 из 4: фаза В — финансовый контроль, шаги 31–38
+
+Person(accountant, "Бухгалтер", "Маржа и сверка", $tags="staff")
+
+System_Boundary(osago, "ИС ОСАГО") {
+    Container(backoffice, "Backoffice", "React SPA", "Мехова А.С.: TasksPage, AuditLogPage, FinanceDashboard → *ApiClient → HttpClient")
+    Container(api, "API", "FastAPI", "Киселев Д.А.: Auth/Policy/Payment/Accident/Inspection/AdminController → сервисы → фасады и репозитории")
+    Container(worker, "Worker", "Python / Celery", "Усков М.В.: OutboxPoller, Scheduler → задачи Celery → сервисы")
+    ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифы, коэффициенты, маржа")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, акты ДТП, очередь задач (outbox)")
+}
+System_Ext(payment, "Платёжная система", "Сессии, webhook, сверка", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка документов и отчётов", $tags="ext")
+
+
+' ===== Фаза В — Усков М.В., Worker: маржа, сверка платежей, отчёт =====
+setIndex(31)
+Rel(accountant, backoffice, "Запускает расчёт маржи за период (FinanceDashboard)", "HTTPS (VPN)")
+Rel(backoffice, api, "POST /api/admin/finance/margin — trigger_margin() [AdminController → AdminService]", "REST/HTTPS, JSON")
+Rel(api, db_audit, "save_task(MARGIN_CALC) [TaskQueueFacade → outbox]", "SQL/TCP 5432")
+Rel(worker, db_audit, "get_for_period(): транзакции [MarginCalculationTask → MarginService → TransactionRepository]", "SQL/TCP 5432", $tags="async")
+Rel(worker, db_tarifs, "get_coefficients(); save_margin_result() [TariffRepository]", "SQL/TCP 5432", $tags="async")
+Rel(worker, payment, "check_pending_transactions() по расписанию [Scheduler → GatewayReconciliationTask → PaymentGatewayFacade]", "HTTPS, JSON", $tags="async")
+Rel(worker, db_audit, "update_status() зависших платежей [ReconciliationService → TransactionRepository]", "SQL/TCP 5432", $tags="async")
+Rel(worker, email, "Отчёт по марже бухгалтеру [ReportTask → ReportService → EmailFacade]", "SMTP/STARTTLS 587", $tags="async")
+
+SHOW_LEGEND()
+@enduml

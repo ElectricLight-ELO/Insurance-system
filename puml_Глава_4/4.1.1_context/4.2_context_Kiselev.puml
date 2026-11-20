@@ -1,0 +1,39 @@
+' Рисунок 4.2 — Локальная диаграмма контекста (уровень 1): API, фиксация ДТП и осмотр, Киселев Д.А.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Context>
+skinparam defaultFontName Arial
+AddElementTag("target", $bgColor="#2E86C1", $borderColor="#1F6391", $fontColor="#FFFFFF", $legendText="Целевой модуль разработчика")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("outer", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний пользователь")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title ИС ОСАГО — локальная диаграмма контекста (L1): фиксация ДТП и осмотр (Киселев Д.А.)
+
+Person(dispatcher, "Диспетчер", "Принимает заявления о ДТП,\nназначает аварийного эксперта", $tags="staff")
+Person(expert, "Аварийный эксперт", "Выезжает на место ДТП,\nзагружает фото и акт осмотра", $tags="staff")
+Person(client, "Клиент", "Участник ДТП: подаёт заявление,\nподписывает протокол осмотра", $tags="staff")
+
+System(osago, "ИС ОСАГО", "Регистрация заявлений о ДТП,\nназначение эксперта,\nприём фото и подписи,\nPDF-протокол осмотра", $tags="target")
+
+System_Ext(ais, "АИС ОСАГО (РСА)", "Проверка действия полиса\nучастника ДТП", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка PDF-протокола\nи уведомлений", $tags="ext")
+System_Ext(sms, "SMS-шлюз", "Одноразовые коды входа\nи подписи протокола", $tags="ext")
+
+Rel_D(dispatcher, osago, "Регистрирует заявление,\nназначает эксперта", "HTTPS")
+Rel_D(expert, osago, "Загружает фото и акт осмотра", "HTTPS")
+Rel_D(client, osago, "Подаёт заявление о ДТП,\nподписывает протокол осмотра", "HTTPS")
+
+Rel_D(osago, ais, "Проверяет действие полиса", "HTTPS, JSON, mTLS")
+Rel_D(osago, email, "Отправляет PDF-протокол клиенту", "SMTP/STARTTLS 587", $tags="async")
+Rel_D(osago, sms, "Отправляет код подтверждения", "HTTPS, JSON")
+
+Lay_R(dispatcher, expert)
+Lay_R(expert, client)
+Lay_R(ais, email)
+Lay_R(email, sms)
+
+SHOW_LEGEND()
+@enduml

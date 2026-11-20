@@ -1,0 +1,96 @@
+' Рисунок 4.29 — Локальная динамическая диаграмма: Web App, продажа и оформление полисов, Романов Н.И.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 260
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("ctrl", $bgColor="#5DADE2", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой входа: контроллеры, страницы, задачи")
+AddElementTag("svc", $bgColor="#85C1E9", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики")
+AddElementTag("integ", $bgColor="#AED6F1", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой интеграции: фасады / API-клиенты")
+AddElementTag("data", $bgColor="#D6EAF8", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой данных: репозитории")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Локальная динамическая диаграмма — расчёт, оформление и оплата полиса ОСАГО в Web App (Романов Н.И.)
+
+Person(client, "Клиент или агент", "Оформляет полис", $tags="staff")
+Person(insured, "Застрахованный клиент", "Оплачивает полис", $tags="staff")
+
+Container_Boundary(web_app, "Web App (React SPA)") {
+    Component(calculator_page, "CalculatorPage", "React Page", "Расчёт стоимости", $tags="ctrl")
+    Component(checkout_page, "CheckoutPage", "React Page", "Оформление и оплата", $tags="ctrl")
+    Component(policy_logic, "PolicyLogic", "React Hooks", "Расчёт, оформление, оплата", $tags="svc")
+    Component(policy_api, "PolicyApiClient", "TypeScript", "Расчёт, оформление, оплата, PDF", $tags="integ")
+    Component(http_client, "HttpClient", "axios", "Токен в каждом запросе, 401/403, повторы", $tags="integ")
+    Component(auth_logic, "AuthLogic", "React Context", "Токен и роль пользователя", $tags="svc")
+}
+
+Container_Boundary(api, "API (FastAPI)") {
+    Component(policy_comp, "PolicyController", "FastAPI Router", "Расчёт и оформление полиса", $tags="ctrl")
+    Component(payment_comp, "PaymentController", "FastAPI Router", "Оплата, webhook", $tags="ctrl")
+    Component(access_comp, "AccessService", "Python, Strategy", "Проверка прав (RBAC)", $tags="svc")
+    Component(policy_svc, "PolicyService", "Python", "Премия, полис", $tags="svc")
+    Component(payment_svc, "PaymentService", "Python", "Сессия, обработка webhook", $tags="svc")
+    Component(ais_facade, "AisOsagoFacade", "HTTP Client", "КБМ, проверки, регистрация", $tags="integ")
+    Component(payment_facade, "PaymentGatewayFacade", "HTTP Client", "Платёжные сессии", $tags="integ")
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Задачи в очередь для Worker", $tags="integ")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Тарифы и коэффициенты", $tags="data")
+    Component(user_repo, "UserRepository", "SQLAlchemy", "Пользователи, полисы", $tags="data")
+    Component(accident_repo, "AccidentRepository", "SQLAlchemy", "Транзакции, очередь задач", $tags="data")
+}
+
+ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифы, коэффициенты")
+ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, полисы")
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Транзакции, outbox")
+Container(worker, "Worker", "Python / Celery", "Регистрация договора, PDF, письма")
+System_Ext(ais, "АИС ОСАГО (РСА)", "КБМ, проверки, регистрация", $tags="ext")
+System_Ext(payment, "Платёжная система", "Платёжные сессии", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка полиса", $tags="ext")
+
+' --- Расчёт премии ---
+Rel(client, calculator_page, "Вводит данные ТС, водителей и региона", "HTTPS")
+Rel(calculator_page, policy_logic, "calculate(data)", "React Hooks")
+Rel(policy_logic, policy_api, "calculate(data)", "TypeScript call")
+Rel(policy_api, http_client, "POST /api/policies/calculate", "TypeScript call")
+Rel(http_client, auth_logic, "getToken()", "React Context")
+Rel(http_client, policy_comp, "calculate_premium(payload)", "REST/HTTPS, JSON")
+Rel(policy_comp, policy_svc, "calculate_premium(data)", "Python call")
+Rel(policy_svc, tariff_repo, "get_coefficients()", "Python call")
+Rel(tariff_repo, db_tarifs, "Читает тарифы и коэффициенты региона", "SQL/TCP 5432")
+Rel(policy_svc, ais_facade, "get_kbm(), check_vehicle(), check_drivers()", "Python call")
+Rel(ais_facade, ais, "Запрос КБМ и проверка ТС и водителей", "HTTPS, JSON, mTLS")
+' --- Оформление ---
+Rel(client, checkout_page, "Подтверждает оформление", "HTTPS")
+Rel(checkout_page, policy_logic, "issue(draft)", "React Hooks")
+Rel(policy_logic, policy_api, "issue(draft)", "TypeScript call")
+Rel(policy_api, http_client, "POST /api/policies", "TypeScript call")
+Rel(http_client, policy_comp, "issue_policy(payload)", "REST/HTTPS, JSON")
+Rel(policy_comp, access_comp, "check_permission(token, «policy.issue»)", "Python call")
+Rel(policy_comp, policy_svc, "issue_policy(dto)", "Python call")
+Rel(policy_svc, user_repo, "save_policy(policy)", "Python call")
+Rel(user_repo, db_users, "Сохраняет полис (status = awaiting_payment)", "SQL/TCP 5432")
+' --- Оплата ---
+Rel(checkout_page, policy_logic, "pay(policyId)", "React Hooks")
+Rel(policy_logic, policy_api, "pay(policyId)", "TypeScript call")
+Rel(policy_api, http_client, "POST /api/payments/session", "TypeScript call")
+Rel(http_client, payment_comp, "create_session(payload)", "REST/HTTPS, JSON")
+Rel(payment_comp, payment_svc, "create_session(policy_id, amount)", "Python call")
+Rel(payment_svc, payment_facade, "create_session(policy_id, amount)", "Python call")
+Rel(payment_facade, payment, "Создаёт платёжную сессию, возвращает ссылку", "HTTPS, JSON")
+Rel(insured, payment, "Оплачивает полис", "HTTPS")
+Rel(payment, payment_comp, "POST /api/payments/webhook — handle_webhook()", "HTTPS, JSON")
+Rel(payment_comp, payment_svc, "handle_webhook(event)", "Python call")
+Rel(payment_svc, accident_repo, "save_transaction(tx)", "Python call")
+Rel(payment_svc, task_queue_comp, "enqueue(CONTRACT_REG), enqueue(PDF_POLICY)", "Python call")
+Rel(task_queue_comp, accident_repo, "save_task(task)", "Python call")
+Rel(accident_repo, db_audit, "Транзакция и две задачи в outbox (pending)", "SQL/TCP 5432")
+' --- Фоновая обработка ---
+Rel(worker, db_audit, "list_pending_tasks(): CONTRACT_REG, PDF_POLICY", "SQL/TCP 5432", $tags="async")
+Rel(worker, ais, "register_policy(policy_data)", "HTTPS, JSON, mTLS", $tags="async")
+Rel(worker, email, "Отправляет PDF полиса и чек", "SMTP/STARTTLS 587", $tags="async")
+Rel(email, client, "Доставляет электронный полис", "E-mail", $tags="async")
+
+SHOW_LEGEND()
+@enduml

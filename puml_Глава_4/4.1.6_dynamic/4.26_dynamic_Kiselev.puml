@@ -1,0 +1,54 @@
+' Рисунок 4.26 — Локальная динамическая диаграмма: API, фиксация ДТП и осмотр, Киселев Д.А.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 260
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("ctrl", $bgColor="#5DADE2", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой входа: контроллеры, страницы, задачи")
+AddElementTag("svc", $bgColor="#85C1E9", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики")
+AddElementTag("integ", $bgColor="#AED6F1", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой интеграции: фасады / API-клиенты")
+AddElementTag("data", $bgColor="#D6EAF8", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой данных: репозитории")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Локальная динамическая диаграмма — регистрация заявления о ДТП и формирование протокола осмотра (API, Киселев Д.А.)
+
+Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера и аварийного эксперта, электронная подпись клиента")
+
+Container_Boundary(api, "API (FastAPI)") {
+    Component(accident_comp, "AccidentController", "FastAPI Router", "Приём REST-запросов: заявления о ДТП, назначение эксперта", $tags="ctrl")
+    Component(inspection_comp, "InspectionController", "FastAPI Router", "Приём REST-запросов: результаты осмотра, фото, электронная подпись", $tags="ctrl")
+    Component(accident_svc, "AccidentService", "Python Service", "Бизнес-логика заявления, назначение эксперта, события аудита", $tags="svc")
+    Component(inspection_svc, "InspectionService", "Python Service", "Бизнес-логика осмотра, приём фото и подписи, постановка задач", $tags="svc")
+    Component(ais_facade, "AisOsagoFacade", "HTTP Client", "Изоляция вызова: проверка полиса через АИС ОСАГО", $tags="integ")
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка задач в очередь outbox", $tags="integ")
+    Component(file_repo, "FileRepository", "PyMongo", "Доступ к фото, подписям и PDF-документам в MongoDB", $tags="data")
+    Component(accident_repo, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям, аудиту и очереди в PostgreSQL", $tags="data")
+}
+
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления, события аудита, очередь задач (outbox)")
+ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото осмотра, подписи, PDF-протоколы")
+Container(worker, "Worker", "Python / Celery", "Фоновая обработка: генерация PDF-протокола, отправка клиенту")
+System_Ext(ais, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО, сведения о договоре", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка документов и уведомлений", $tags="ext")
+
+Rel(web_app, accident_comp, "Регистрация заявления о ДТП — register_claim", "REST/HTTPS, JSON")
+Rel(accident_comp, accident_svc, "Вызов register_claim() — создание заявления", "Python Function Call")
+Rel(accident_svc, ais_facade, "Вызов check_policy() — проверка полиса", "Python Function Call")
+Rel(ais_facade, ais, "Запрос сведений о полисе ОСАГО", "HTTPS, JSON, mTLS")
+Rel(accident_svc, accident_repo, "assign_expert() — выбор эксперта (AssignmentStrategy) и сохранение", "Python Function Call")
+Rel(accident_repo, db_audit, "Запись заявления, статуса ASSIGNED и события аудита", "SQL/TCP 5432")
+Rel(web_app, inspection_comp, "Приём результатов осмотра — submit_results", "REST/HTTPS, JSON, multipart")
+Rel(inspection_comp, inspection_svc, "Вызов submit_results() — обработка результатов осмотра", "Python Function Call")
+Rel(inspection_svc, file_repo, "Вызов upload_photos() и accept_signature() — фото и подпись клиента", "Python Function Call")
+Rel(file_repo, db_files, "Сохранение фотографий осмотра и подписи (GridFS)", "MongoDB/TCP 27017")
+Rel(inspection_svc, task_queue_comp, "Вызов enqueue() — постановка задачи PDF_PROTOCOL", "Python Function Call")
+Rel(task_queue_comp, accident_repo, "Вызов save_task() — запись задачи в очередь outbox", "Python Function Call")
+Rel(worker, db_audit, "Выборка задач из очереди и обновление статусов", "SQL/TCP 5432", $tags="async")
+Rel(worker, db_files, "Чтение фотографий, генерация и сохранение PDF-протокола", "MongoDB/TCP 27017", $tags="async")
+Rel(worker, email, "Отправка протокола осмотра клиенту", "SMTP/STARTTLS 587", $tags="async")
+
+SHOW_LEGEND()
+@enduml

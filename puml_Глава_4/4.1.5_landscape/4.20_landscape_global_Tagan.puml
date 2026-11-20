@@ -1,0 +1,102 @@
+' Рисунок 4.20 — Глобальный системный ландшафт ИС ОСАГО, Таган А.М.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Context>
+skinparam defaultFontName Arial
+skinparam wrapWidth 260
+AddElementTag("target", $bgColor="#2E86C1", $borderColor="#1F6391", $fontColor="#FFFFFF", $legendText="Модуль ИС ОСАГО (локальный ландшафт участника)")
+AddElementTag("core", $bgColor="#1168BD", $borderColor="#0B4884", $fontColor="#FFFFFF", $legendText="Ядро ИС ОСАГО / корпоративная система")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("outer", $bgColor="#7F7F7F", $borderColor="#5F5F5F", $fontColor="#FFFFFF", $legendText="Внешний пользователь")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title ИС ОСАГО. SYSTEM LANDSCAPE (L0) — глобальный ландшафт: объединение локальных ландшафтов рисунков 4.21–4.24 (тимлид Таган А.М.)
+
+' ===== Пользователи (все роли локальных ландшафтов) =====
+Boundary(g_citizens, "Граждане и клиенты") {
+    Person(guest, "Гость", "Считает стоимость полиса\nбез регистрации", $tags="outer")
+    Person(client, "Клиент", "Оформляет полис, личный кабинет;\nучастник ДТП: подписывает протокол осмотра", $tags="staff")
+    Person(insured, "Застрахованный клиент", "Оплачивает полис", $tags="outer")
+}
+Boundary(g_front, "Сотрудники фронт-офиса") {
+    Person(agent, "Страховой агент", "Оформляет полисы клиентам,\nпередаёт данные о продажах и КВ", $tags="staff")
+    Person(manager, "Менеджер отдела продаж", "Отчёты по продажам,\nагенты, сложные случаи", $tags="staff")
+    Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="staff")
+    Person(expert, "Аварийный эксперт", "Выезжает на место ДТП,\nпроводит осмотр, загружает фото", $tags="staff")
+}
+Boundary(g_back, "Сотрудники бэк-офиса") {
+    Person(admin, "Администратор", "Пользователи, роли, тарифы,\nрегистрация договора по команде", $tags="staff")
+    Person(support, "Оператор поддержки", "Поиск полисов и платежей,\nперезапуск сбойных задач", $tags="staff")
+    Person(security, "Сотрудник ИБ", "Журнал аудита,\nрасследования инцидентов", $tags="staff")
+    Person(accountant, "Бухгалтер", "Финансовый учёт, маржа, оплаты,\nсчета и акты, отчёты КВ", $tags="staff")
+    Person(fin_auditor, "Финансовый аудитор", "Анализирует финансовые потоки,\nпроверяет результаты сверки платежей", $tags="staff")
+    Person(head, "Руководитель отдела", "Контролирует прибыльность портфеля\nи агентские выплаты", $tags="staff")
+}
+
+Enterprise_Boundary(ent, "Корпоративная ИТ-инфраструктура страховой компании") {
+    System_Boundary(osago, "ИС ОСАГО") {
+        System(webapp, "Web App: продажа и оформление полисов", "Расчёт премии, оформление и оплата полиса, личный кабинет,\nрабочие места агента и менеджера (Романов Н.И.)", $tags="target")
+        System(accident, "Фиксация ДТП и осмотр", "Регистрация заявлений, назначение эксперта, приём фото\nи подписи, PDF-протокол (Киселев Д.А.)", $tags="target")
+        System(finance, "Фин. контроль и маржа", "Расчёт маржинальности периода, выплата КВ,\nавтоматическая сверка транзакций, аудит (Усков М.В.)", $tags="target")
+        System(backoffice, "Backoffice: администрирование и аудит", "Пользователи и роли, тарифы, задачи, поиск полисов,\nжурнал аудита, финансовые отчёты (Мехова А.С.)", $tags="target")
+        System(core, "Подсистема оформления полисов и урегулирования (ядро: API и Worker)", "Тарифы, договоры, полисы, платежи и КВ, данные о продажах,\nДТП, регистрация договоров, PDF, очередь задач (outbox), аудит", $tags="core")
+    }
+    System(iam, "Служба авторизации (IAM)", "Единые учётные записи, SSO, RBAC,\nвыпуск и проверка токенов доступа", $tags="core")
+    System(crm, "CRM страховой компании", "Карточки клиентов, лиды и продажи агентов,\nистория обращений", $tags="core")
+}
+
+System_Ext(sms, "SMS-шлюз", "Доставка одноразовых кодов\nавторизации", $tags="ext")
+System_Ext(email, "E-mail система", "Полисы, чеки, протоколы осмотра,\nотчёты, счета и акты, уведомления о сбоях", $tags="ext")
+System_Ext(payment, "Платёжная система", "Платёжные сессии, webhook об оплате,\nсверка поступлений", $tags="ext")
+System_Ext(bank, "Банк / Платёжный эквайринг", "Проведение оплат, выписки,\nстатусы платежей, сверка", $tags="ext")
+System_Ext(ais, "АИС ОСАГО (РСА)", "КБМ, проверка ТС, водителей и полиса,\nрегистрация договоров", $tags="ext")
+
+' ===== Пользователи -> модули =====
+Rel(guest, webapp, "Считает стоимость полиса", "HTTPS")
+Rel(client, webapp, "Оформляет полис, скачивает его", "HTTPS")
+Rel(agent, webapp, "Оформляет полисы, передаёт продажи и КВ", "HTTPS")
+Rel(manager, webapp, "Смотрит отчёты по продажам", "HTTPS")
+Rel(insured, payment, "Оплачивает полис", "HTTPS")
+Rel(dispatcher, accident, "Регистрирует заявление о ДТП, назначает эксперта", "HTTPS")
+Rel(expert, accident, "Загружает фото и результаты осмотра", "HTTPS")
+Rel(client, accident, "Подписывает протокол осмотра", "HTTPS")
+Rel(admin, backoffice, "Управляет пользователями, ролями, тарифами", "HTTPS")
+Rel(support, backoffice, "Ищет полисы и платежи, перезапускает задачи", "HTTPS")
+Rel(security, backoffice, "Просматривает и выгружает журнал аудита", "HTTPS")
+Rel(accountant, backoffice, "Смотрит маржу и оплаты, запрашивает счета", "HTTPS")
+Rel(accountant, finance, "Запускает расчёт маржи, КВ, контролирует сверку оплат", "HTTPS")
+Rel(fin_auditor, finance, "Просматривает финансовые логи и отчёты аудита", "HTTPS")
+Rel(head, finance, "Изучает сводные показатели прибыльности портфеля", "HTTPS")
+
+' ===== Модули -> ядро ИС ОСАГО =====
+Rel(webapp, core, "Расчёт, оформление, оплата, PDF полиса, продажи агента", "REST/HTTPS, JSON")
+Rel(backoffice, core, "Административные операции, журнал аудита, статусы задач и платежей", "REST/HTTPS, JSON")
+Rel(core, accident, "Сведения о договоре ОСАГО по номеру полиса", "HTTPS, JSON")
+Rel(core, finance, "Данные о проданных полисах для расчёта маржи", "HTTPS, JSON")
+
+' ===== Корпоративные системы =====
+Rel(webapp, iam, "Вход по коду, роль, токен", "HTTPS, JSON, OAuth2")
+Rel(accident, iam, "Проверка учётных данных, ролей (RBAC) и токенов сессии", "HTTPS, JSON, OAuth2")
+Rel(finance, iam, "Проверка учётных данных, ролей (RBAC) и токенов сессии", "HTTPS, JSON, OAuth2")
+Rel(backoffice, iam, "Вход по коду, проверка ролей (RBAC), токены", "HTTPS, JSON, OAuth2")
+Rel(iam, sms, "Отправка одноразового кода для авторизации", "HTTPS, JSON")
+Rel(webapp, crm, "Данные о продажах агента и клиенте", "HTTPS, JSON", $tags="async")
+Rel(backoffice, crm, "Карточка клиента при обращении в поддержку", "HTTPS, JSON")
+
+' ===== Внешние системы =====
+Rel(core, payment, "Создаёт платёжную сессию, сверяет поступления", "HTTPS, JSON")
+Rel(payment, core, "Уведомляет об оплате (webhook)", "HTTPS, JSON", $tags="async")
+Rel(finance, bank, "Запрос статусов платежей, автоматическая сверка оплат", "HTTPS, JSON", $tags="async")
+Rel(core, ais, "КБМ, проверки ТС и водителей, регистрация договора (в т.ч. по команде администратора)", "HTTPS, JSON, mTLS")
+Rel(accident, ais, "Проверка наличия полиса ОСАГО при регистрации заявления", "HTTPS, JSON, mTLS")
+Rel(finance, ais, "Сверка данных по договорам при финансовом аудите", "HTTPS, JSON, mTLS")
+Rel(core, email, "Полис и чек, отчёты, счета и акты, уведомления о сбоях", "SMTP / STARTTLS", $tags="async")
+Rel(accident, email, "Протокол осмотра и уведомления", "SMTP / STARTTLS", $tags="async")
+Rel(finance, email, "Закрывающие отчёты и уведомления бухгалтеру", "SMTP / STARTTLS", $tags="async")
+Rel(email, client, "Доставляет электронный полис и протокол осмотра", "E-mail", $tags="async")
+Rel(email, accountant, "Доставляет отчёты, счета и акты", "E-mail", $tags="async")
+
+SHOW_LEGEND()
+@enduml

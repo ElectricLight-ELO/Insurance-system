@@ -1,0 +1,42 @@
+' Рисунок 4.22 — Локальный системный ландшафт: Worker, финансовый контроль, Усков М.В.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Context>
+skinparam defaultFontName Arial
+AddElementTag("target", $bgColor="#2E86C1", $borderColor="#1F6391", $fontColor="#FFFFFF", $legendText="Целевой модуль разработчика")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title ИС ОСАГО, фин. контроль и маржа. SYSTEM LANDSCAPE (L0) — модуль бухгалтерии и финансового контроля (Усков М.В.)
+
+Person(fin_auditor, "Финансовый аудитор", "Анализирует финансовые потоки,\nпроверяет результаты сверки платежей", $tags="staff")
+Person(head, "Руководитель отдела", "Контролирует общую прибыльность\nпортфеля и агентские выплаты", $tags="staff")
+Person(accountant, "Бухгалтер", "Ведёт финансовый учёт, контролирует\nмаржинальность, проверяет отчёты КВ", $tags="staff")
+
+Enterprise_Boundary(ent, "Корпоративная ИТ-инфраструктура страховой компании") {
+    System(policy, "Подсистема оформления полисов", "Договоры ОСАГО, страховые премии\nи данные о продажах")
+    System(finance, "ИС ОСАГО: фин. контроль и маржа", "Расчёт маржинальности периода, выплата КВ,\nавтоматическая сверка транзакций, аудит", $tags="target")
+    System(iam, "Служба авторизации (IAM)", "Аутентификация сотрудников, RBAC,\nвыпуск и проверка токенов доступа")
+}
+
+System_Ext(bank, "Банк / Платёжный эквайринг", "Внешняя финансовая система:\nпроведение оплат, выписки, сверка", $tags="ext")
+System_Ext(ais, "АИС ОСАГО (РСА)", "Отраслевая система: проверка договоров,\nсведения о полисах", $tags="ext")
+System_Ext(email, "E-mail система", "Рассылка финансовых отчётов\nи уведомлений бухгалтеру", $tags="ext")
+System_Ext(sms, "SMS-шлюз", "Доставка одноразовых\nкодов авторизации", $tags="ext")
+
+Rel(policy, finance, "Передача данных о проданных\nполисах для расчёта маржи", "HTTPS, JSON")
+Rel(fin_auditor, finance, "Просматривает финансовые логи\nи отчёты аудита", "HTTPS")
+Rel(head, finance, "Изучает сводные показатели\nприбыльности портфеля", "HTTPS")
+Rel(accountant, finance, "Запускает расчёт маржи, КВ,\nконтролирует сверку оплат", "HTTPS")
+
+Rel(finance, iam, "Проверка учётных данных, ролей (RBAC)\nи токенов сессии", "HTTPS, JSON, OAuth2")
+Rel(iam, sms, "Отправка одноразового кода\nдля авторизации", "HTTPS, JSON")
+Rel(finance, bank, "Запрос статусов платежей,\nавтоматическая сверка оплат", "HTTPS, JSON", $tags="async")
+Rel(finance, ais, "Сверка данных по договорам\nпри финансовом аудите", "HTTPS, JSON, mTLS")
+Rel(finance, email, "Отправка закрывающих отчётов\nи уведомлений бухгалтеру", "SMTP / STARTTLS", $tags="async")
+Rel(email, accountant, "Доставка отчётов на e-mail", "E-mail", $tags="async")
+
+SHOW_LEGEND()
+@enduml

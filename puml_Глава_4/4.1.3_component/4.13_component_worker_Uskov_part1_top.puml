@@ -1,0 +1,63 @@
+' Рисунок 4.13 — Диаграмма компонентов контейнера Worker (C4, уровень 3), Усков М.В. — верхняя часть (а)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title Worker (Python / Celery) — компоненты (C4, уровень 3), Усков М.В.\nЧасть 1 из 2 (верхняя): приём задач, задачи Celery и сервисы
+
+Container_Ext(api, "API", "FastAPI", "REST/HTTPS JSON — расчёт премии, оформление, оплата, RBAC, фиксация ДТП, администрирование, выдача PDF", $tags="ext")
+ContainerDb_Ext(db_audit_in, "DB_AUDIT (outbox)", "PostgreSQL", "Таблица очереди задач", $tags="ext")
+
+Container_Boundary(worker, "Worker — Python / Celery") {
+    ' --- Приём задач ---
+    Component(outbox_poller, "OutboxPoller", "Celery Task", "Забирает задачи из outbox", $tags="changed")
+    Component(scheduler, "Scheduler", "Celery Beat", "Задачи по расписанию", $tags="changed")
+    ' --- Задачи Celery ---
+    Component(registration_task, "RegistrationTask", "Celery Task", "Регистрация договора, повторная проверка", $tags="changed")
+    Component(notification_task, "NotificationTask", "Celery Task", "Письма: полисы, чеки, протоколы, сбои", $tags="changed")
+    Component(pdf_task, "PdfTask", "Celery Task", "PDF полисов и протоколов", $tags="changed")
+    Component(margin_task, "MarginCalculationTask", "Celery Task", "Расчёт маржи за период")
+    Component(report_task, "ReportTask", "Celery Task", "Отчёты, счета и акты", $tags="changed")
+    Component(cleanup_task, "FileCleanupTask", "Celery Task", "Удаление устаревших файлов", $tags="changed")
+    Component(reconciliation_task, "GatewayReconciliationTask", "Celery Task", "Сверка платежей")
+    ' --- Сервисы ---
+    Component(contract_svc, "ContractService", "Python", "Регистрация договора в АИС после оплаты", $tags="changed")
+    Component(notification_svc, "NotificationService", "Python", "Шаблоны писем и вложения", $tags="changed")
+    Component(document_svc, "DocumentService", "Python", "Сборка PDF, очистка файлов", $tags="changed")
+    Component(margin_svc, "MarginService", "Python", "Агрегация, расчёт маржи и КВ")
+    Component(report_svc, "ReportService", "Python", "Отчёты по марже, счета и акты", $tags="changed")
+    Component(reconciliation_svc, "ReconciliationService", "Python", "Сопоставление поступлений")
+}
+
+
+Rel(api, db_audit_in, "Ставит задачи: повтор, отчёты, расчёт маржи", "SQL/TCP 5432 (outbox)")
+Rel(outbox_poller, db_audit_in, "Читает outbox (status = pending)", "SQL/TCP 5432")
+Rel(outbox_poller, registration_task, "Запускает фоновую задачу", "Celery call")
+Rel(outbox_poller, notification_task, "Запускает фоновую задачу", "Celery call")
+Rel(outbox_poller, pdf_task, "Запускает фоновую задачу", "Celery call")
+Rel(outbox_poller, margin_task, "Запускает фоновую задачу", "Celery call")
+Rel(outbox_poller, report_task, "Запускает фоновую задачу", "Celery call")
+Rel(scheduler, report_task, "Запускает фоновую задачу", "Celery call")
+Rel(scheduler, cleanup_task, "Запускает фоновую задачу", "Celery call")
+Rel(scheduler, reconciliation_task, "Запускает фоновую задачу", "Celery call")
+Rel(registration_task, contract_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(notification_task, notification_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(pdf_task, document_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(margin_task, margin_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(report_task, report_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(cleanup_task, document_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(reconciliation_task, reconciliation_svc, "Передаёт запрос в бизнес-логику", "Python call")
+
+Lay_R(api, db_audit_in)
+
+SHOW_LEGEND()
+@enduml

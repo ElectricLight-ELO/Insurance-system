@@ -1,0 +1,77 @@
+' Рисунок 4.8 — Диаграмма контейнеров (уровень 2): API, фиксация ДТП и осмотр, Киселев Д.А.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Container>
+
+title АВАРИЙНЫЙ ЭКСПЕРТ C4 CONTAINER
+
+
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
+AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
+AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
+
+
+
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="персона_синяя")
+Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="персона_синяя")
+Person(client, "Клиент", "Участник ДТП", $tags="персона_синяя")
+
+
+System_Boundary(fixation_system, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+
+    Container(web_app, "Web App", "React SPA", "Рабочее место эксперта: загрузка фото осмотра,\nсведения о ДТП, электронная подпись клиента")
+
+    Container(api, "API", "FASTAPI", "REST/HTTPS JSON — акты фиксации ДТП,\nосмотр, проверка полиса ОСАГО")
+
+    Container(worker, "Worker", "Python", "Асинхронная обработка:\nгенерация PDF-протокола, рассылка")
+
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, акты фиксации, статусы осмотра,\nжурнал аудита и очередь асинхронных задач")
+
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Хранит фото ДТП, подписи\nи файлы документов")
+}
+
+
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+
+
+
+Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус")
+Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП")
+Rel(client, web_app, "Ставит электронную подпись\nна протоколе осмотра")
+
+Rel(web_app, api, "REST/HTTPS JSON — отправка\nрезультатов осмотра")
+
+
+Rel(api, db_audit, "Читает и записывает акты фиксации,\nстатусы осмотра, события аудита, SQL")
+Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driver")
+
+
+Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON", $tags="пунктир")
+
+' Rel(api, email_sys, "Отправляет уведомления о статусе\nзаявления, SMTP", $tags="пунктир")
+
+
+Rel(worker, db_audit, "Читает и обновляет\nстатусы задач, SQL")
+Rel(worker, db_files, "Читает фото и подписи для протокола,\nсохраняет PDF-протокол, MongoDB driver")
+
+
+Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", $tags="пунктир")
+Rel(worker, email_sys, "Отправляет протокол\nосмотра", $tags="пунктир")
+' Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", $tags="пунктир")
+
+
+
+dispatcher -[hidden]right- expert
+expert -[hidden]right- client
+dispatcher -[hidden]down- web_app
+
+web_app -[hidden]down- api
+api -[hidden]down- db_audit
+db_audit -[hidden]right- db_files
+db_audit -[hidden]down- worker
+
+fixation_system -[hidden]down- ais_osago
+ais_osago -[hidden]right- email_sys
+
+@enduml

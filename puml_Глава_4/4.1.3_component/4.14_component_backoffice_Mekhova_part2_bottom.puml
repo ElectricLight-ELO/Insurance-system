@@ -1,0 +1,56 @@
+' Рисунок 4.14 — Диаграмма компонентов контейнера Backoffice (C4, уровень 3), Мехова А.С. — нижняя часть (б)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_LEFT_RIGHT()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title Backoffice (React SPA) — компоненты (C4, уровень 3), Мехова А.С.\nЧасть 2 из 2 (нижняя): логика, API-клиенты, HttpClient и обращение к API
+
+
+Container_Boundary(backoffice, "Backoffice — React SPA") {
+    ' --- Логика и общие компоненты ---
+    Component(auth_logic, "AuthLogic", "React Context", "Токен и роль пользователя")
+    Component(finance_logic, "FinanceLogic", "React Hooks", "Дашборд маржи, счета и акты")
+    Component(audit_logic, "AuditLogic", "React Hooks", "Фильтры журнала, выгрузка")
+    Component(operations_logic, "OperationsLogic", "React Hooks", "Задачи, поиск полисов, статусы")
+    Component(admin_logic, "AdminLogic", "React Hooks", "Формы пользователей, ролей и тарифов")
+    Component(document_viewer, "DocumentViewer", "React Component", "Просмотр PDF полисов, протоколов и актов", $tags="changed")
+    ' --- API-клиенты ---
+    Component(auth_api, "AuthApiClient", "TypeScript", "Запрос и проверка кода, токен")
+    Component(finance_api, "FinanceApiClient", "TypeScript", "Маржа, оплаты, счета и акты")
+    Component(audit_api, "AuditApiClient", "TypeScript", "Журнал аудита")
+    Component(operations_api, "OperationsApiClient", "TypeScript", "Задачи, полисы, платежи")
+    Component(admin_api, "AdminApiClient", "TypeScript", "Пользователи, роли, тарифы")
+    ' --- Сетевой слой ---
+    Component(http_client, "HttpClient", "axios", "Токен в каждом запросе, 401/403, повторы")
+    Component(notification_center, "NotificationCenter", "React Component", "Уведомления об ошибках и результатах операций", $tags="changed")
+}
+
+Container_Ext(api, "API", "FastAPI", "REST/HTTPS JSON — расчёт премии, оформление, оплата, RBAC, фиксация ДТП, администрирование, тарифы, финансовый контроль, выдача PDF", $tags="ext")
+
+Rel(auth_logic, auth_api, "Запрашивает данные API", "TypeScript call")
+Rel(finance_logic, finance_api, "Запрашивает данные API", "TypeScript call")
+Rel(audit_logic, audit_api, "Запрашивает данные API", "TypeScript call")
+Rel(operations_logic, operations_api, "Запрашивает данные API", "TypeScript call")
+Rel(document_viewer, operations_api, "Запрашивает PDF по ссылке", "TypeScript call")
+Rel(admin_logic, admin_api, "Запрашивает данные API", "TypeScript call")
+Rel(auth_api, http_client, "Отправляет HTTP-запрос с токеном", "TypeScript call")
+Rel(finance_api, http_client, "Отправляет HTTP-запрос с токеном", "TypeScript call")
+Rel(audit_api, http_client, "Отправляет HTTP-запрос с токеном", "TypeScript call")
+Rel(operations_api, http_client, "Отправляет HTTP-запрос с токеном", "TypeScript call")
+Rel(admin_api, http_client, "Отправляет HTTP-запрос с токеном", "TypeScript call")
+Rel(http_client, auth_logic, "Берёт токен", "TypeScript call", $tags="rbac")
+Rel_R(http_client, notification_center, "Показ ошибок", "TypeScript call")
+Rel(http_client, api, "Администрирование, тарифы, аудит, дашборд, управление задачами", "REST/HTTPS, JSON")
+
+
+SHOW_LEGEND()
+@enduml

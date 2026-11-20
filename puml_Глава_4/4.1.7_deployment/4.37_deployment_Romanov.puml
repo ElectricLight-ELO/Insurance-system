@@ -1,0 +1,67 @@
+' Рисунок 4.37 — Сегмент диаграммы развёртывания: Web App, продажа и оформление полисов, Романов Н.И.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+skinparam defaultFontName Arial
+skinparam shadowing false
+skinparam ArrowColor #1F3F6E
+skinparam node {
+  BackgroundColor #EAF4FB
+  BorderColor #2E86C1
+}
+skinparam artifact {
+  BackgroundColor #6CC0F0
+  BorderColor #2E86C1
+}
+skinparam database {
+  BackgroundColor #A9D8F5
+  BorderColor #2E86C1
+}
+skinparam cloud {
+  BackgroundColor #F2F2F2
+  BorderColor #8A8A8A
+}
+
+title ИС ОСАГО, продажа полисов. DEPLOYMENT DIAGRAM — локальный сегмент модуля Web App (Романов Н.И.)
+
+node "Устройства клиентов и агентов\n(браузер: ПК, смартфон)" as dev
+node "CDN / кэш статики\n(опционально)" as cdn
+
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as host {
+  node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
+    artifact "Nginx Reverse Proxy\n:443, TLS 1.2+, HSTS\nединственная точка входа\nrate limit на /api/policies/calculate" as nginx
+    artifact "Web App\nстатический бандл React SPA\n(отдаётся Nginx)" as webapp
+    artifact "API (FastAPI)\nреплика 1\n:8000" as api1
+    artifact "API (FastAPI)\nреплика 2\n:8000" as api2
+    artifact "Worker (Celery)\nинстанс 1" as w1
+    database "DB_USERS\nPostgreSQL, Master\n:5432, TLS" as users_m
+    database "DB_USERS\nPostgreSQL, Replica\n(hot standby), :5432" as users_r
+    database "DB_TARIFS\nPostgreSQL :5432, TLS" as tarifs
+    database "DB_AUDIT\nPostgreSQL :5432, TLS\n(транзакции, outbox)" as audit
+  }
+}
+
+cloud "Интернет" as inet {
+  node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+  node "E-mail система\nвнешний почтовый релей" as email
+  node "Платёжная система\n(эквайринг)" as pay
+}
+
+dev --> cdn : HTTPS :443/TCP\n(статика)
+cdn --> nginx : HTTPS :443/TCP
+dev --> nginx : HTTPS, TLS 1.2+, HSTS\n:443/TCP (API)
+nginx --> webapp : отдача статики\n:443/TCP
+nginx --> api1 : reverse proxy\n:8000/TCP, round-robin\n+ health check
+nginx --> api2 : reverse proxy\n:8000/TCP, round-robin\n+ health check
+api1 --> users_m : SQL/TCP, TLS :5432
+api2 --> users_m : SQL/TCP, TLS :5432
+api2 --> tarifs : SQL/TCP, TLS :5432
+api1 --> audit : SQL/TCP, TLS :5432
+api2 --> audit : SQL/TCP, TLS :5432
+w1 --> audit : опрос outbox\n:5432/TCP, TLS
+users_m --> users_r : streaming replication\n:5432/TCP, TLS
+api1 --> ais : HTTPS, mTLS :443/TCP\nКБМ, проверки
+api1 --> pay : HTTPS :443/TCP\nплатёжная сессия
+w1 --> ais : HTTPS, mTLS :443/TCP\nрегистрация договора
+w1 --> email : SMTP STARTTLS :587/TCP
+pay --> nginx : webhook об оплате\nHTTPS :443/TCP,\nподпись запроса + IP allowlist
+@enduml

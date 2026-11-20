@@ -1,0 +1,32 @@
+' Рисунок 4.25 — Глобальная динамическая диаграмма: сквозной процесс ИС ОСАГО, Таган А.М. — часть 4 из 4 (г)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 300
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Глобальная динамическая диаграмма ИС ОСАГО — сквозной процесс всех модулей (сборка тимлида Таган А.М.)\nЧасть 4 из 4: фаза Г — перезапуск задачи и аудит, шаги 39–43
+
+Person(suppsec, "Поддержка и ИБ", "Задачи и аудит", $tags="staff")
+
+System_Boundary(osago, "ИС ОСАГО") {
+    Container(backoffice, "Backoffice", "React SPA", "Мехова А.С.: TasksPage, AuditLogPage, FinanceDashboard → *ApiClient → HttpClient")
+    Container(api, "API", "FastAPI", "Киселев Д.А.: Auth/Policy/Payment/Accident/Inspection/AdminController → сервисы → фасады и репозитории")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, акты ДТП, очередь задач (outbox)")
+}
+
+
+' ===== Фаза Г — Мехова А.С., Backoffice: перезапуск задачи, журнал аудита =====
+setIndex(39)
+Rel(suppsec, backoffice, "Перезапускает сбойную задачу (TasksPage), открывает журнал аудита (AuditLogPage)", "HTTPS (VPN)")
+Rel(backoffice, api, "POST /api/admin/tasks/{id}/restart — restart_task() [AdminController → AccessService (RBAC) → AdminService]", "REST/HTTPS, JSON")
+Rel(api, db_audit, "save_task(CONTRACT_REG, pending); save_audit(task_restarted) [TaskQueueFacade, AuditService]", "SQL/TCP 5432")
+Rel(backoffice, api, "GET /api/admin/audit — get_audit() [AdminController → AdminService]", "REST/HTTPS, JSON")
+Rel(api, db_audit, "list_audit() [AccidentRepository]", "SQL/TCP 5432")
+
+SHOW_LEGEND()
+@enduml

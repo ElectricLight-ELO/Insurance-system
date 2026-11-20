@@ -1,0 +1,64 @@
+' Рисунок 4.27 — Локальная динамическая диаграмма: Worker, финансовый контроль, Усков М.В.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 260
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("ctrl", $bgColor="#5DADE2", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой входа: контроллеры, страницы, задачи")
+AddElementTag("svc", $bgColor="#85C1E9", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики")
+AddElementTag("integ", $bgColor="#AED6F1", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой интеграции: фасады / API-клиенты")
+AddElementTag("data", $bgColor="#D6EAF8", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой данных: репозитории")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Локальная динамическая диаграмма — расчёт маржи, комиссий и сверка зависших платежей (Worker, Усков М.В.)
+
+Container(backoffice, "Backoffice", "React SPA", "Рабочее место бухгалтера: FinanceDashboard")
+Container(api, "API", "FastAPI", "AdminController → AdminService → TaskQueueFacade")
+
+Container_Boundary(worker, "Worker (Python / Celery)") {
+    Component(outbox_poller, "OutboxPoller", "Celery Task", "Забирает задачи из outbox", $tags="ctrl")
+    Component(scheduler, "Scheduler", "Celery Beat", "Задачи по расписанию", $tags="ctrl")
+    Component(margin_task, "MarginCalculationTask", "Celery Task", "Расчёт маржи за период", $tags="ctrl")
+    Component(reconciliation_task, "GatewayReconciliationTask", "Celery Task", "Сверка платежей", $tags="ctrl")
+    Component(report_task, "ReportTask", "Celery Task", "Отчёты, счета и акты", $tags="ctrl")
+    Component(margin_svc, "MarginService", "Python", "Агрегация, расчёт маржи и агентских комиссий (КВ)", $tags="svc")
+    Component(reconciliation_svc, "ReconciliationService", "Python", "Сопоставление поступлений с транзакциями", $tags="svc")
+    Component(report_svc, "ReportService", "Python", "Отчёт по марже бухгалтеру", $tags="svc")
+    Component(payment_facade, "PaymentGatewayFacade", "HTTP Client", "Изоляция вызова: статусы транзакций в платёжной системе", $tags="integ")
+    Component(email_facade, "EmailFacade", "SMTP Client", "Отправка отчётов", $tags="integ")
+    Component(transaction_repo, "TransactionRepository", "SQLAlchemy", "Транзакции, платежи, КВ", $tags="data")
+    Component(tariff_repo, "TariffRepository", "SQLAlchemy", "Тарифные коэффициенты, результаты маржи", $tags="data")
+    Component(audit_repo, "AuditRepository", "SQLAlchemy", "Outbox, статусы задач, аудит", $tags="data")
+}
+
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Финансовые транзакции, события аудита, очередь задач")
+ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки, ставки КВ, результаты маржи")
+System_Ext(payment, "Платёжная система / Эквайринг", "Внешний банковский шлюз, статусы платежей", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка финансовых отчётов бухгалтеру", $tags="ext")
+
+Rel(backoffice, api, "POST /api/admin/finance/margin — trigger_margin()", "REST/HTTPS, JSON")
+Rel(api, db_audit, "save_task(MARGIN_CALC) — запись задачи в outbox", "SQL/TCP 5432")
+Rel(outbox_poller, audit_repo, "list_pending_tasks(): MARGIN_CALC", "Python call", $tags="async")
+Rel(audit_repo, db_audit, "Выборка задач со статусом pending", "SQL/TCP 5432")
+Rel(outbox_poller, margin_task, "Запускает фоновую задачу", "Celery call")
+Rel(margin_task, margin_svc, "calculate_period_margin(period)", "Python call")
+Rel(margin_svc, transaction_repo, "get_for_period() — чтение транзакций портфеля", "Python call")
+Rel(transaction_repo, db_audit, "Чтение финансовых транзакций за период", "SQL/TCP 5432")
+Rel(margin_svc, tariff_repo, "get_coefficients(); save_margin_result()", "Python call")
+Rel(tariff_repo, db_tarifs, "Чтение коэффициентов и ставок КВ, запись результата маржи", "SQL/TCP 5432")
+Rel(scheduler, reconciliation_task, "Запуск по расписанию (Celery Beat)", "Celery call", $tags="async")
+Rel(reconciliation_task, reconciliation_svc, "reconcile_payments()", "Python call")
+Rel(reconciliation_svc, transaction_repo, "get_pending_transactions() — поиск зависших оплат", "Python call")
+Rel(reconciliation_svc, payment_facade, "check_transaction_status()", "Python call")
+Rel(payment_facade, payment, "Запрос актуальных статусов транзакций", "HTTPS, JSON")
+Rel(transaction_repo, db_audit, "update_status() зависших платежей", "SQL/TCP 5432")
+Rel(outbox_poller, report_task, "Запускает формирование отчёта", "Celery call")
+Rel(report_task, report_svc, "build_margin_report()", "Python call")
+Rel(report_svc, email_facade, "send_report()", "Python call")
+Rel(email_facade, email, "Отправка итогового финансового отчёта бухгалтеру", "SMTP/STARTTLS 587", $tags="async")
+
+SHOW_LEGEND()
+@enduml

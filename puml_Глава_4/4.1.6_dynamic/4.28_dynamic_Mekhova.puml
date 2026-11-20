@@ -1,0 +1,77 @@
+' Рисунок 4.28 — Локальная динамическая диаграмма: Backoffice, администрирование и аудит, Мехова А.С.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 260
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddElementTag("ctrl", $bgColor="#5DADE2", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой входа: контроллеры, страницы, задачи")
+AddElementTag("svc", $bgColor="#85C1E9", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики")
+AddElementTag("integ", $bgColor="#AED6F1", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой интеграции: фасады / API-клиенты")
+AddElementTag("data", $bgColor="#D6EAF8", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой данных: репозитории")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Локальная динамическая диаграмма — перезапуск сбойной задачи регистрации договора и контроль в журнале аудита (Backoffice, Мехова А.С.)
+
+Person(support, "Оператор поддержки", "Перезапускает сбойные задачи", $tags="staff")
+Person(security, "Сотрудник ИБ", "Проверяет журнал аудита", $tags="staff")
+
+Container_Boundary(backoffice, "Backoffice (React SPA)") {
+    Component(tasks_page, "TasksPage", "React Page", "Сбойные задачи, перезапуск", $tags="ctrl")
+    Component(audit_page, "AuditLogPage", "React Page", "Журнал аудита, расследования", $tags="ctrl")
+    Component(operations_logic, "OperationsLogic", "React Hooks", "Задачи, поиск полисов, статусы", $tags="svc")
+    Component(audit_logic, "AuditLogic", "React Hooks", "Фильтры журнала, выгрузка", $tags="svc")
+    Component(operations_api, "OperationsApiClient", "TypeScript", "Задачи, полисы, платежи", $tags="integ")
+    Component(audit_api, "AuditApiClient", "TypeScript", "Журнал аудита", $tags="integ")
+    Component(report_exporter, "ReportExporter", "SheetJS", "Выгрузка в Excel / CSV", $tags="integ")
+    Component(http_client, "HttpClient", "axios", "Токен в каждом запросе, 401/403, повторы", $tags="integ")
+    Component(auth_logic, "AuthLogic", "React Context", "Токен и роль пользователя", $tags="svc")
+    Component(notification_center, "NotificationCenter", "React Component", "Уведомления о результатах", $tags="svc")
+}
+
+Container_Boundary(api, "API (FastAPI)") {
+    Component(admin_comp, "AdminController", "FastAPI Router", "Пользователи, тарифы, аудит, задачи", $tags="ctrl")
+    Component(access_comp, "AccessService", "Python, Strategy", "Проверка прав (RBAC)", $tags="svc")
+    Component(admin_svc, "AdminService", "Python", "Административные операции", $tags="svc")
+    Component(audit_comp, "AuditService", "Python", "Запись событий аудита", $tags="svc")
+    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Задачи в очередь для Worker", $tags="integ")
+    Component(accident_repo, "AccidentRepository", "SQLAlchemy", "Аудит, транзакции, очередь задач", $tags="data")
+}
+
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, очередь задач (outbox)")
+Container(worker, "Worker", "Python / Celery", "Фоновая регистрация договора")
+System_Ext(ais, "АИС ОСАГО (РСА)", "Регистрация договоров", $tags="ext")
+
+Rel(support, tasks_page, "Нажимает «Перезапустить» у задачи CONTRACT_REG", "HTTPS")
+Rel(tasks_page, operations_logic, "restartTask(taskId)", "React Hooks")
+Rel(operations_logic, operations_api, "restartTask(taskId, body)", "TypeScript call")
+Rel(operations_api, http_client, "POST /api/admin/tasks/{id}/restart", "TypeScript call")
+Rel(http_client, auth_logic, "getToken()", "React Context")
+Rel(http_client, admin_comp, "restart_task(task_id)", "REST/HTTPS, JSON")
+Rel(admin_comp, access_comp, "check_permission(token, «tasks.restart»)", "Python call")
+Rel(admin_comp, admin_svc, "restart_task(task_id)", "Python call")
+Rel(admin_svc, task_queue_comp, "enqueue(TaskItem CONTRACT_REG)", "Python call")
+Rel(task_queue_comp, accident_repo, "save_task(task)", "Python call")
+Rel(accident_repo, db_audit, "Возвращает задачу в outbox (status = pending)", "SQL/TCP 5432")
+Rel(admin_svc, audit_comp, "log_event(actor, «task_restarted», task_id)", "Python call")
+Rel(audit_comp, accident_repo, "save_audit(event)", "Python call")
+Rel(accident_repo, db_audit, "Записывает событие аудита", "SQL/TCP 5432")
+Rel(http_client, notification_center, "showSuccess(«Задача перезапущена»)", "React")
+Rel(worker, db_audit, "list_pending_tasks(): забирает CONTRACT_REG", "SQL/TCP 5432", $tags="async")
+Rel(worker, ais, "register_policy(policy_data)", "HTTPS, JSON, mTLS", $tags="async")
+Rel(worker, db_audit, "mark_task_done(task_id)", "SQL/TCP 5432", $tags="async")
+Rel(security, audit_page, "Открывает журнал с фильтром «task_restarted»", "HTTPS")
+Rel(audit_page, audit_logic, "loadEvents()", "React Hooks")
+Rel(audit_logic, audit_api, "events(filter)", "TypeScript call")
+Rel(audit_api, http_client, "GET /api/admin/audit", "TypeScript call")
+Rel(http_client, admin_comp, "get_audit()", "REST/HTTPS, JSON")
+Rel(admin_comp, access_comp, "check_permission(token, «audit.view»)", "Python call")
+Rel(admin_comp, admin_svc, "get_audit()", "Python call")
+Rel(admin_svc, accident_repo, "list_audit()", "Python call")
+Rel(accident_repo, db_audit, "Читает события аудита", "SQL/TCP 5432")
+Rel(audit_logic, report_exporter, "exportEvents() → toExcel(events)", "TypeScript call")
+
+SHOW_LEGEND()
+@enduml

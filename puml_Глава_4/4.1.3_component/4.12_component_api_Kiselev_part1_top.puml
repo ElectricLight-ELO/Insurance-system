@@ -1,0 +1,63 @@
+' Рисунок 4.12 — Диаграмма компонентов контейнера API (C4, уровень 3), Киселев Д.А. — верхняя часть (а)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Component>
+LAYOUT_TOP_DOWN()
+skinparam defaultFontName Arial
+skinparam wrapWidth 220
+AddElementTag("changed", $borderColor="#E8590C", $borderThickness=3, $legendText="Изменено / добавлено по итогам ревью")
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешний контейнер / система")
+AddRelTag("rbac", $textColor="#6A3DE8", $lineColor="#6A3DE8", $lineStyle=DashedLine(), $legendText="Проверка прав (RBAC)")
+AddRelTag("audit", $textColor="#707070", $lineColor="#9E9E9E", $lineStyle=DashedLine(), $legendText="Запись в аудит")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+
+
+title API (FastAPI) — компоненты (C4, уровень 3), Киселев Д.А.\nЧасть 1 из 2 (верхняя): входящие запросы, контроллеры и сервисы
+
+Container_Ext(web_app, "Web App", "React SPA", "Расчёт, оформление и оплата полиса, личный кабинет, рабочие места агента, менеджера, диспетчера и эксперта", $tags="ext")
+Container_Ext(backoffice, "Backoffice", "React SPA", "Админ-панель: пользователи, роли, тарифы, аудит, задачи, поиск полисов, аналитика маржи", $tags="ext")
+System_Ext(payment_sys_in, "Платёжная система", "Webhook об оплате", $tags="ext")
+
+Container_Boundary(api, "API — FastAPI") {
+    ' --- Контроллеры (FastAPI Router) ---
+    Component(auth_comp, "AuthController", "FastAPI Router", "Вход по одноразовому коду, выдача токена")
+    Component(policy_comp, "PolicyController", "FastAPI Router", "Расчёт премии, оформление полиса", $tags="changed")
+    Component(payment_comp, "PaymentController", "FastAPI Router", "Оплата, webhook", $tags="changed")
+    Component(accident_comp, "AccidentController", "FastAPI Router", "Заявления о ДТП, назначение эксперта")
+    Component(inspection_comp, "InspectionController", "FastAPI Router", "Результаты осмотра, фото, подпись")
+    Component(admin_comp, "AdminController", "FastAPI Router", "Пользователи, тарифы, аудит, задачи, полисы, финансовые отчёты", $tags="changed")
+    ' --- Сервисы (бизнес-правила) ---
+    Component(access_comp, "AccessService", "Python, Strategy", "Выпуск токена и проверка прав (RBAC)", $tags="changed")
+    Component(policy_svc, "PolicyService", "Python", "Расчёт премии, КБМ, сохранение полиса", $tags="changed")
+    Component(payment_svc, "PaymentService", "Python", "Платёжная сессия, обработка webhook", $tags="changed")
+    Component(accident_svc, "AccidentService", "Python", "Заявление, проверка полиса, назначение эксперта", $tags="changed")
+    Component(inspection_svc, "InspectionService", "Python", "Акт осмотра, подпись, задача на PDF")
+    Component(admin_svc, "AdminService", "Python", "Учётные записи, тарифы, финансы, вопросы клиентам", $tags="changed")
+}
+
+
+Rel(web_app, auth_comp, "Запрашивает код, подтверждает вход", "REST/HTTPS, JSON")
+Rel(web_app, policy_comp, "Расчёт премии и оформление полиса", "REST/HTTPS, JSON")
+Rel(web_app, payment_comp, "Создаёт платёжную сессию", "REST/HTTPS, JSON")
+Rel(web_app, accident_comp, "Регистрирует заявление о ДТП", "REST/HTTPS, JSON")
+Rel(web_app, inspection_comp, "Передаёт результаты осмотра, фото и подпись", "REST/HTTPS, JSON, multipart")
+Rel(backoffice, auth_comp, "Вход сотрудника по коду", "REST/HTTPS, JSON")
+Rel(backoffice, admin_comp, "Администрирование, тарифы, аудит, дашборд, управление задачами", "REST/HTTPS, JSON")
+Rel(payment_sys_in, payment_comp, "Уведомляет об оплате (webhook)", "HTTPS, JSON")
+Rel(auth_comp, access_comp, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(policy_comp, policy_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(payment_comp, payment_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(accident_comp, accident_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(inspection_comp, inspection_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(admin_comp, admin_svc, "Передаёт запрос в бизнес-логику", "Python call")
+Rel(policy_comp, access_comp, "Проверка прав (RBAC)", "Python call", $tags="rbac")
+Rel(payment_comp, access_comp, "Проверка прав (RBAC)", "Python call", $tags="rbac")
+Rel(accident_comp, access_comp, "Проверка прав (RBAC)", "Python call", $tags="rbac")
+Rel(inspection_comp, access_comp, "Проверка прав (RBAC)", "Python call", $tags="rbac")
+Rel(admin_comp, access_comp, "Проверка прав (RBAC)", "Python call", $tags="rbac")
+
+Lay_R(web_app, backoffice)
+Lay_R(backoffice, payment_sys_in)
+
+SHOW_LEGEND()
+@enduml

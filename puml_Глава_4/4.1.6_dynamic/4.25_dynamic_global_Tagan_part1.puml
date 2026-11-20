@@ -1,0 +1,55 @@
+' Рисунок 4.25 — Глобальная динамическая диаграмма: сквозной процесс ИС ОСАГО, Таган А.М. — часть 1 из 4 (а)
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+!include <C4/C4_Dynamic>
+skinparam defaultFontName Arial
+skinparam wrapWidth 300
+AddElementTag("ext", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF", $legendText="Внешняя система")
+AddElementTag("staff", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF", $legendText="Пользователь / сотрудник")
+AddRelTag("async", $lineStyle=DashedLine(), $lineColor="#000000", $legendText="Асинхронное взаимодействие (фоновая обработка)")
+HIDE_STEREOTYPE()
+
+title Глобальная динамическая диаграмма ИС ОСАГО — сквозной процесс всех модулей (сборка тимлида Таган А.М.)\nЧасть 1 из 4: фаза 0 (вход) и фаза А — продажа и оформление полиса, шаги 1–17
+
+Person(client, "Клиент / агент", "Полис, подпись протокола", $tags="staff")
+Person(insured, "Застрахованный клиент", "Оплата полиса", $tags="staff")
+
+System_Boundary(osago, "ИС ОСАГО") {
+    Container(web_app, "Web App", "React SPA", "Романов Н.И.: CalculatorPage, CheckoutPage, AccidentPage, InspectionPage → *ApiClient → HttpClient")
+    Container(api, "API", "FastAPI", "Киселев Д.А.: Auth/Policy/Payment/Accident/Inspection/AdminController → сервисы → фасады и репозитории")
+    Container(worker, "Worker", "Python / Celery", "Усков М.В.: OutboxPoller, Scheduler → задачи Celery → сервисы")
+    ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли, полисы")
+    ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифы, коэффициенты, маржа")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Аудит, транзакции, акты ДТП, очередь задач (outbox)")
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото, подписи, PDF")
+}
+System_Ext(sms, "SMS-шлюз", "Одноразовые коды", $tags="ext")
+System_Ext(ais, "АИС ОСАГО (РСА)", "КБМ, проверка полиса, регистрация договоров", $tags="ext")
+System_Ext(payment, "Платёжная система", "Сессии, webhook, сверка", $tags="ext")
+System_Ext(email, "E-mail система", "Доставка документов и отчётов", $tags="ext")
+
+
+' ===== Фаза 0 — вход по одноразовому коду (общая, API) =====
+setIndex(1)
+Rel(client, web_app, "Вводит телефон и одноразовый код", "HTTPS")
+Rel(web_app, api, "POST /api/auth/code — request_code(); POST /api/auth/verify — issue_token() [AuthController → AccessService]", "REST/HTTPS, JSON")
+Rel(api, sms, "send_code(phone, code) [SmsGatewayFacade]", "HTTPS, JSON")
+
+' ===== Фаза А — Романов Н.И., Web App: расчёт, оформление, оплата, регистрация, PDF =====
+Rel(web_app, api, "POST /api/policies/calculate — calculate_premium() [PolicyController → PolicyService]", "REST/HTTPS, JSON")
+Rel(api, db_tarifs, "get_coefficients() [TariffRepository]", "SQL/TCP 5432")
+Rel(api, ais, "get_kbm(), check_vehicle(), check_drivers() [AisOsagoFacade]", "HTTPS, JSON, mTLS")
+Rel(web_app, api, "POST /api/policies — issue_policy() [PolicyController]", "REST/HTTPS, JSON")
+Rel(api, db_users, "save_policy() [UserRepository]", "SQL/TCP 5432")
+Rel(web_app, api, "POST /api/payments/session — create_session() [PaymentController → PaymentService]", "REST/HTTPS, JSON")
+Rel(api, payment, "create_session(policy_id, amount) [PaymentGatewayFacade]", "HTTPS, JSON")
+Rel(insured, payment, "Оплачивает полис", "HTTPS")
+Rel(payment, api, "POST /api/payments/webhook — handle_webhook()", "HTTPS, JSON")
+Rel(api, db_audit, "save_transaction(); save_task(CONTRACT_REG, PDF_POLICY) [AccidentRepository, TaskQueueFacade → outbox]", "SQL/TCP 5432")
+Rel(worker, db_audit, "list_pending_tasks() [OutboxPoller → AuditRepository]", "SQL/TCP 5432", $tags="async")
+Rel(worker, ais, "register_policy(policy_data) [RegistrationTask → ContractService → AisOsagoFacade]", "HTTPS, JSON, mTLS", $tags="async")
+Rel(worker, db_files, "generate_policy_pdf() → save_policy_pdf() [PdfTask → DocumentService → FileRepository]", "MongoDB/TCP 27017", $tags="async")
+Rel(worker, email, "send_mail(полис, чек) [NotificationTask → EmailFacade]", "SMTP/STARTTLS 587", $tags="async")
+
+SHOW_LEGEND()
+@enduml

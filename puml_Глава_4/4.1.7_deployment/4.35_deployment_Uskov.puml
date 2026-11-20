@@ -1,0 +1,65 @@
+' Рисунок 4.35 — Сегмент диаграммы развёртывания: Worker, финансовый контроль, Усков М.В.
+' Рендер: PlantUML 1.2024+ со встроенной библиотекой C4 (!include <C4/...>), интернет не нужен
+@startuml
+skinparam defaultFontName Arial
+skinparam shadowing false
+skinparam ArrowColor #1F3F6E
+skinparam node {
+  BackgroundColor #EAF4FB
+  BorderColor #2E86C1
+}
+skinparam artifact {
+  BackgroundColor #6CC0F0
+  BorderColor #2E86C1
+}
+skinparam database {
+  BackgroundColor #A9D8F5
+  BorderColor #2E86C1
+}
+skinparam cloud {
+  BackgroundColor #F2F2F2
+  BorderColor #8A8A8A
+}
+
+title ИС ОСАГО, фин. контроль и маржа. DEPLOYMENT DIAGRAM — развёртывание модуля бухгалтера и финансового контроля (Усков М.В.)
+
+node "Рабочее место\nбухгалтера, аудитора,\nфин. менеджера\n(браузер)" as ws
+
+node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 CPU / 32 GB" as host {
+  node "Изолированная docker-сеть\n172.20.0.0/16 (bridge)" as net {
+    artifact "Nginx Reverse Proxy\n:443, TLS 1.2+\nединственная точка входа" as nginx
+    artifact "Web App\nстатический бандл React SPA\n(модуль бухгалтерии)" as webapp
+    artifact "API (FastAPI)\nреплика 1\n:8000" as api1
+    artifact "API (FastAPI)\nреплика 2\n:8000" as api2
+    artifact "Worker (Celery)\nинстанс 1\n(расчёт маржи и сверка)" as w1
+    artifact "Worker (Celery)\nинстанс 2\n(генерация отчётов PDF)" as w2
+    database "DB_AUDIT\nPostgreSQL, Master\n:5432, TLS\n(очередь задач, транзакции, логи)" as audit_m
+    database "DB_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as audit_r
+    database "DB_TARIFS\nPostgreSQL\n:5432, TLS\n(тарифные коэффициенты и КВ)" as tarifs
+    database "DB_FILES\nMongoDB / GridFS\n:27017, TLS\n(акты и PDF-протоколы)" as files
+  }
+}
+
+cloud "Интернет / Внешние сервисы" as inet {
+  node "E-mail система\nпочтовый сервер отчётов" as email
+  node "АИС ОСАГО (РСА)\nвнешняя отраслевая система" as ais
+  node "Платёжная система / Эквайринг\nвнешний банковский шлюз" as bank
+}
+
+ws --> nginx : HTTPS, TLS 1.2+, HSTS\n:443/TCP
+nginx --> webapp : отдача статики\n:443/TCP
+nginx --> api1 : reverse proxy\n:8000/TCP, round-robin\n+ health check
+nginx --> api2 : reverse proxy\n:8000/TCP, round-robin\n+ health check
+api1 --> audit_m : SQL/TCP, TLS\n:5432
+api2 --> audit_m : SQL/TCP, TLS\n:5432
+api1 --> tarifs : SQL/TCP, TLS\n:5432
+api2 --> tarifs : SQL/TCP, TLS\n:5432
+w1 --> audit_m : чтение задач очереди,\nзапись результатов маржи :5432/TCP
+w1 --> tarifs : чтение тарифных сеток\nи комиссий :5432/TCP
+w2 --> audit_m : запись лога аудита,\nобновление статусов :5432/TCP
+w2 --> files : сохранение сгенерированных\nPDF-отчётов :27017/TCP
+audit_m --> audit_r : streaming replication\n:5432/TCP, TLS
+w2 --> email : SMTPS :465/TCP\n(рассылка отчётов бухгалтеру)
+api1 --> ais : HTTPS, mTLS\n(проверка полисов)\n:443/TCP
+w1 --> bank : HTTPS / REST API\n(сверка зависших транзакций)\n:443/TCP
+@enduml
