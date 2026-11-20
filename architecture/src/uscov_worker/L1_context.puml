@@ -1,10 +1,10 @@
 @startuml
 !include ../core/C4_Context.puml
 
-title ИС ОСАГО — локальная диаграмма контекста (L1): фоновая обработка и финансовый контроль (Усков М.В.)
+title ИС ОСАГО — локальная диаграмма контекста (L1): фоновая обработка и финансовый контроль
 
 Person(accountant, "Бухгалтер", "Маржа, сверка оплат,\nсчета и акты", $tags="staff")
-Person(sales_manager, "Менеджер отдела продаж", "Отчёты по продажам\nи комиссии агентов (КВ)", $tags="staff")
+Person(manager, "Менеджер отдела продаж", "Отчёты по продажам\nи комиссии агентов (КВ)", $tags="staff")
 Person(agent, "Страховой агент", "Получает расчёт\nкомиссионного вознаграждения", $tags="staff")
 
 System(mod_finance, "ИС ОСАГО", "Фоновая обработка: регистрация договоров, PDF,\nсверка платежей, расчёт маржи и КВ, отчёты", $tags="target")
@@ -14,7 +14,7 @@ System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Регистрация до
 System_Ext(email_sys, "E-mail система", "Рассылка полисов,\nотчётов, счетов и актов", $tags="ext")
 
 Rel(accountant, mod_finance, "Запускает расчёт маржи,\nпроверяет сверку оплат", "HTTPS")
-Rel(sales_manager, mod_finance, "Смотрит отчёты по продажам и КВ", "HTTPS")
+Rel(manager, mod_finance, "Смотрит отчёты по продажам и КВ", "HTTPS")
 Rel(agent, mod_finance, "Передаёт данные о продажах", "REST/HTTPS, JSON")
 
 Rel(mod_finance, payment_sys, "Загружает отчёт о поступлениях для сверки", "HTTPS, JSON", $tags="async")
