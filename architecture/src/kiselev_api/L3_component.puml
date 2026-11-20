@@ -1,77 +1,132 @@
 @startuml
-!include ../core/C4_Component.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
-title C4 COMPONENT — API (FastAPI): ИС ОСАГО (Киселев Д.А.)
+title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, фиксация ДТП
 
-Container(web_app, "Web App", "React SPA", "Рабочие места диспетчера,\nэксперта и клиента")
-Container(backoffice, "Backoffice", "React SPA", "Рабочее место администратора\nи поддержки")
-Container(worker, "Worker", "Python / Celery", "Фоновая обработка задач\nиз очереди outbox")
+AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
 
-Container_Boundary(api, "API — FastAPI") {
+AddComponentTag("api", $bgColor="#6cc2f5", $borderColor="#3A9BD8", $fontColor="#000000", $legendText="Слой API: контроллеры (FastAPI)")
+AddComponentTag("service", $bgColor="#6cc2f5", $borderColor="#2E86C1", $fontColor="#000000", $legendText="Слой бизнес-логики: сервисы")
+AddComponentTag("integration", $bgColor="#6cc2f5", $borderColor="#247FB0", $fontColor="#000000", $legendText="Слой интеграции: фасады")
+AddComponentTag("data", $bgColor="#6cc2f5", $borderColor="#1B6E9C", $fontColor="#000000", $legendText="Слой данных: репозитории")
 
-    Component(auth_comp, "AuthController", "FastAPI Router", "Вход по одноразовому коду:\nзапрос кода, проверка кода,\nвыдача токена доступа", $tags="layer_api")
-    Component(access_comp, "AccessService", "Python Service", "Проверка прав доступа (RBAC)\nпо подменяемой политике (Strategy)", $tags="layer_service")
-    Component(policy_comp, "PolicyController", "FastAPI Router", "Расчёт премии и оформление полиса,\nпроверка ТС и водителей", $tags="layer_api")
-    Component(payment_comp, "PaymentController", "FastAPI Router", "Создание платёжной сессии\nи приём webhook об оплате", $tags="layer_api")
-    Component(accident_comp, "AccidentController", "FastAPI Router", "Регистрация заявления о ДТП,\nназначение эксперта, статусы", $tags="layer_api")
-    Component(inspection_comp, "InspectionController", "FastAPI Router", "Приём результатов осмотра,\nфотографий и электронной подписи", $tags="layer_api")
-    Component(admin_comp, "AdminController", "FastAPI Router", "Администрирование пользователей,\nтарифов, журнала аудита и задач", $tags="layer_api")
+Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера и эксперта,\nэлектронная подпись клиента")
 
-    Component(claim_service, "AccidentService", "Python Service", "Бизнес-правила заявления:\nсоздание, назначение эксперта,\nсмена статусов", $tags="layer_service")
-    Component(inspection_service, "InspectionService", "Python Service", "Формирование акта фиксации ДТП,\nпроверка подписи, постановка\nзадачи на генерацию PDF", $tags="layer_service")
-    Component(audit_comp, "AuditService", "Python Service", "Запись событий аудита\nпо каждому действию,\nпоиск по журналу", $tags="layer_service")
-    Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь outbox для Worker", $tags="layer_integration")
-    Component(ais_gateway, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nпроверка наличия полиса ОСАГО\nчерез АИС ОСАГО", $tags="layer_integration")
+Container_Boundary(api, "API — FASTAPI") {
 
-    Component(users_repo, "UserRepository", "SQLAlchemy", "Доступ к пользователям, ролям,\nправам и одноразовым кодам\nв PostgreSQL", $tags="layer_data")
-    Component(claims_repo, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям, актам,\naудиту и очереди в PostgreSQL", $tags="layer_data")
-    Component(files_repo, "FileRepository", "PyMongo", "Доступ к фото ДТП, подписям\nи PDF-документам в MongoDB", $tags="layer_data")
+    ' --- Слой API / представления ---
+    together {
+        Component(c_insp, "InspectionController", "FastAPI Router", "Принимает REST-запросы:\nрезультаты осмотра, фото,\nэлектронная подпись клиента", $tags="api")
+        Component(c_acc, "AccidentController", "FastAPI Router", "Принимает REST-запросы:\nрегистрация заявления о ДТП,\nназначение эксперта, статусы", $tags="api")
+    }
+
+    ' --- Слой бизнес-логики ---
+    ' ВАЖНО: Ставим AuditService ПЕРВЫМ, чтобы он был слева, и связываем его right-связью
+    together {
+        Component(s_audit, "AuditService", "Python Service", "Запись событий аудита\nпо каждому действию\nс системой", $tags="service")
+        Component(s_insp, "InspectionService", "Python Service", "Формирование акта фиксации ДТП,\nпроверка подписи, постановка\nзадачи на генерацию PDF", $tags="service")
+        Component(s_acc, "AccidentService", "Python Service", "Бизнес-правила заявления:\nсоздание, назначение эксперта,\nсмена статусов", $tags="service")
+    }
+
+    ' --- Слой интеграции ---
+    together {
+        Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(генерация PDF-протокола)", $tags="integration")
+        Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nпроверка наличия полиса ОСАГО\nчерез АИС ОСАГО", $tags="integration")
+    }
+
+    ' --- Слой доступа к данным ---
+    together {
+        Component(r_acc, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям, актам,\nсобытиям аудита и очереди\nв PostgreSQL", $tags="data")
+        Component(r_file, "FileRepository", "PyMongo", "Доступ к фото ДТП, подписям\nи PDF-документам\nв MongoDB", $tags="data")
+    }
 }
 
-ContainerDb(db_users, "DB_USERS", "PostgreSQL", "Пользователи, роли,\nправа доступа (RBAC)")
-ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления, аудит,\nочередь задач (outbox)")
-ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото осмотра, подписи,\nPDF-протоколы")
+' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления о ДТП, акты фиксации,\nаудит, очередь задач")
+    ContainerDb(db_files, "DB_FILES", "MongoDB", "Фото ДТП, подписи,\nPDF-документы")
+}
+together {
+    System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
+}
 
-System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договоре", $tags="ext")
-System_Ext(payment_sys, "Платёжная система", "Платёжные сессии,\nwebhook об оплате", $tags="ext")
+' === СВЯЗИ (RELATIONSHIPS) ===
 
-Rel(web_app, auth_comp, "Вход по одноразовому коду", "REST/HTTPS, JSON")
-Rel(web_app, policy_comp, "Расчёт и оформление полиса", "REST/HTTPS, JSON")
-Rel(web_app, payment_comp, "Оплата полиса", "REST/HTTPS, JSON")
-Rel(web_app, accident_comp, "Регистрация заявления о ДТП,\nназначение эксперта, статусы", "REST/HTTPS, JSON")
-Rel(web_app, inspection_comp, "Результаты осмотра,\nфото, подпись клиента", "REST/HTTPS, multipart")
-Rel(backoffice, admin_comp, "Администрирование, тарифы,\nаудит, управление задачами", "REST/HTTPS, JSON")
+' Web App -> Контроллеры
+Rel(web_app, c_insp, "Результаты осмотра [REST/JSON]")
+Rel(web_app, c_acc, "Регистрация заявления [REST/JSON]")
 
-Rel(auth_comp, access_comp, "Проверка кода и выпуск токена", "Python (in-process)")
-Rel(policy_comp, access_comp, "Проверка прав перед расчётом", "Python (in-process)", $tags="rbac")
-Rel(payment_comp, access_comp, "Проверка прав перед оплатой", "Python (in-process)", $tags="rbac")
-Rel(accident_comp, access_comp, "Проверка ролей диспетчера", "Python (in-process)", $tags="rbac")
-Rel(inspection_comp, access_comp, "Проверка ролей эксперта и клиента", "Python (in-process)", $tags="rbac")
-Rel(admin_comp, access_comp, "Проверка ролей администратора", "Python (in-process)", $tags="rbac")
+' Контроллеры -> Сервисы
+Rel(c_insp, s_insp, "Вызов логики [Python]")
+Rel(c_acc, s_acc, "Вызов логики [Python]")
 
-Rel(accident_comp, claim_service, "Вызов бизнес-логики заявления", "Python (in-process)")
-Rel(inspection_comp, inspection_service, "Вызов бизнес-логики осмотра", "Python (in-process)")
-Rel(admin_comp, audit_comp, "Поиск и просмотр журнала аудита", "Python (in-process)", $tags="audit")
+' Сервисы -> Аудит (теперь AuditService слева, стрелки будут короткими)
+Rel(s_insp, s_audit, "События аудита [Python]")
+Rel(s_acc, s_audit, "События аудита [Python]")
 
-Rel(claim_service, ais_gateway, "Проверка наличия полиса ОСАГО", "Python (in-process)")
-Rel(claim_service, claims_repo, "Чтение и запись заявлений,\nназначение эксперта", "Python (in-process)")
-Rel(claim_service, audit_comp, "События аудита заявления", "Python (in-process)", $tags="audit")
-Rel(inspection_service, files_repo, "Сохранение фото и подписи", "Python (in-process)")
-Rel(inspection_service, task_queue_comp, "Постановка задачи PDF_PROTOCOL\nв очередь outbox", "Python (in-process)")
-Rel(inspection_service, audit_comp, "События аудита осмотра", "Python (in-process)", $tags="audit")
+' Сервисы -> Фасады
+Rel(s_insp, f_task, "Задача на PDF [Python]")
+Rel(s_insp, f_ais, "Проверка полиса [Python]")
 
-Rel(auth_comp, users_repo, "Учётные записи и одноразовые коды", "Python (in-process)")
-Rel(access_comp, users_repo, "Роли и права (RBAC)", "Python (in-process)")
-Rel(policy_comp, users_repo, "Чтение клиентов и полисов", "Python (in-process)")
-Rel(payment_comp, payment_sys, "Создание платёжной сессии", "HTTPS, JSON")
-Rel(payment_sys, payment_comp, "Уведомление об оплате (webhook)", "HTTPS, JSON")
-Rel(task_queue_comp, claims_repo, "Запись задачи в очередь outbox", "Python (in-process)")
+' Сервисы -> Репозитории
+Rel(s_acc, r_acc, "Чтение/запись [SQLAlchemy]")
+Rel(s_insp, r_file, "Сохранение фото [PyMongo]")
+Rel(s_audit, r_acc, "Запись аудита [SQLAlchemy]")
 
-Rel(claims_repo, db_audit, "Заявления, акты, аудит,\nочередь задач", "SQL/TCP 5432")
-Rel(users_repo, db_users, "Пользователи, роли, права", "SQL/TCP 5432")
-Rel(files_repo, db_files, "Фото, подписи, PDF-документы", "MongoDB/TCP 27017")
-Rel(ais_gateway, ais_osago, "Проверка полиса ОСАГО", "HTTPS, JSON, mTLS")
-Rel(worker, task_queue_comp, "Выборка задач из очереди\nи обновление статусов", "SQL/TCP 5432")
+' Фасад -> Репозиторий
+Rel(f_task, r_acc, "Очередь задач [SQL]")
 
+' Репозитории -> БД
+Rel(r_acc, db_audit, "Данные [SQL/TCP]")
+Rel(r_file, db_files, "Файлы [MongoDB Wire]")
+
+' Фасад -> Внешняя система
+Rel(f_ais, ais_osago, "Проверка ОСАГО [HTTP(S)/JSON]")
+
+' === УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ) ===
+' ЖЕСТКАЯ СЕТКА: ЭТО ГЛАВНОЕ ИСПРАВЛЕНИЕ
+
+' 1. Выстраиваем контроллеры в ряд (Inspection слева, Accident справа)
+c_insp -[hidden]right- c_acc
+
+' 2. Выстраиваем сервисы в ряд (Audit слева, Inspection в центре, Accident справа)
+s_audit -[hidden]right- s_insp
+s_insp -[hidden]right- s_acc
+
+' 3. Выстраиваем фасады в ряд (Task в центре, Ais справа, Email под Accident)
+f_task -[hidden]right- f_ais
+
+
+' 4. Выстраиваем репозитории в ряд
+r_acc -[hidden]right- r_file
+
+' 5. Выстраиваем БД и внешние системы в ряд
+db_audit -[hidden]right- db_files
+db_files -[hidden]right- ais_osago
+
+
+' 6. Вертикальные связи для жесткой иерархии слоев
+' Контроллеры строго над сервисами
+c_insp -[hidden]down- s_insp
+c_acc -[hidden]down- s_acc
+
+' Сервисы строго над фасадами
+s_insp -[hidden]down- f_task
+s_acc -[hidden]down- f_ais
+
+' Фасады строго над репозиториями
+f_task -[hidden]down- r_acc
+f_ais -[hidden]down- r_file
+
+' Репозитории строго над БД
+r_acc -[hidden]down- db_audit
+r_file -[hidden]down- db_files
+
+' Web App строго над контроллерами
+web_app -[hidden]down- c_insp
+web_app -[hidden]down- c_acc
+
+' === ЛЕГЕНДА ===
 SHOW_LEGEND()
+
 @enduml

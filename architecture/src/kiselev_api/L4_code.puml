@@ -1,12 +1,32 @@
 @startuml
-!include ../core/class_style.puml
+title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "API (FastAPI)"
 
-title ИС ОСАГО, фиксация ДТП. UML CLASS DIAGRAM — компонент "API (FastAPI)" (Киселев Д.А.)
+skinparam classAttributeIconSize 0
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle frame
+
+skinparam class {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+skinparam interface {
+    BackgroundColor #F4FAFE
+    BorderColor #2E86C1
+    HeaderBackgroundColor #A9D8F5
+}
+skinparam enum {
+    BackgroundColor #F4FAFE
+    BorderColor #3A9BD8
+    HeaderBackgroundColor #6cc2f5
+}
+
 
 ' =====================================================
 ' СЛОЙ API: КОНТРОЛЛЕРЫ (FastAPI Router)
 ' =====================================================
-package "Слой API: контроллеры (FastAPI Router)" {
+package "Слой API: контроллеры (FastAPI Router)" #E8F4FB {
 
     class AccidentController {
         - _service: IAccidentService
@@ -25,10 +45,11 @@ package "Слой API: контроллеры (FastAPI Router)" {
     }
 }
 
+
 ' =====================================================
 ' СЛОЙ БИЗНЕС-ЛОГИКИ: СЕРВИСЫ
 ' =====================================================
-package "Слой бизнес-логики: сервисы" {
+package "Слой бизнес-логики: сервисы" #E8F4FB {
 
     interface IAccidentService {
         + register_claim(claim: AccidentClaim) -> AccidentClaim
@@ -63,6 +84,7 @@ package "Слой бизнес-логики: сервисы" {
         + submit_results(inspection: Inspection) -> Inspection
         + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
         + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+        - _check_policy(claim: AccidentClaim) -> bool
         - _audit_event(actor: str, action: str, entity_id: UUID) -> None
     }
 
@@ -73,10 +95,11 @@ package "Слой бизнес-логики: сервисы" {
     }
 }
 
+
 ' =====================================================
 ' ПАТТЕРН STRATEGY: АЛГОРИТМЫ НАЗНАЧЕНИЯ ЭКСПЕРТА
 ' =====================================================
-package "Strategy: алгоритмы назначения эксперта" {
+package "Strategy: алгоритмы назначения эксперта" #FDF3E3 {
 
     interface AssignmentStrategy {
         + select_expert(claim: AccidentClaim) -> UUID
@@ -95,10 +118,11 @@ package "Strategy: алгоритмы назначения эксперта" {
     }
 }
 
+
 ' =====================================================
 ' СЛОЙ ИНТЕГРАЦИИ: ФАСАДЫ
 ' =====================================================
-package "Слой интеграции: фасады" {
+package "Слой интеграции: фасады" #EAF1FA {
 
     class TaskQueueFacade {
         - _session: Session
@@ -113,10 +137,11 @@ package "Слой интеграции: фасады" {
     }
 }
 
+
 ' =====================================================
 ' СЛОЙ ДАННЫХ: РЕПОЗИТОРИИ
 ' =====================================================
-package "Слой данных: репозитории" {
+package "Слой данных: репозитории" #EAF1FA {
 
     interface IAccidentRepository {
         + get_claim(claim_id: UUID) -> AccidentClaim | None
@@ -152,10 +177,11 @@ package "Слой данных: репозитории" {
     }
 }
 
+
 ' =====================================================
 ' ДОМЕН: СУЩНОСТИ И ПЕРЕЧИСЛЕНИЯ
 ' =====================================================
-package "Домен: сущности и перечисления" {
+package "Домен: сущности и перечисления" #F5F5F5 {
 
     enum AccidentStatus {
         NEW
@@ -220,6 +246,7 @@ package "Домен: сущности и перечисления" {
     }
 }
 
+
 ' =====================================================
 ' СВЯЗИ: РЕАЛИЗАЦИЯ ИНТЕРФЕЙСОВ
 ' =====================================================
@@ -230,15 +257,16 @@ FileRepository ..|> IFileRepository
 FreeExpertStrategy ..|> AssignmentStrategy
 RegionExpertStrategy ..|> AssignmentStrategy
 
+
 ' =====================================================
-' СВЯЗИ: ВНЕДРЕНИЕ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
+' СВЯЗИ: ИНЪЕКЦИЯ ЗАВИСИМОСТЕЙ ЧЕРЕЗ ИНТЕРФЕЙСЫ (DIP)
 ' =====================================================
 AccidentController ..> IAccidentService : "DI"
 InspectionController ..> IInspectionService : "DI"
 
 AccidentService ..> IAccidentRepository : "DI"
 AccidentService ..> AuditService : "DI"
-AccidentService o--> AssignmentStrategy : "агрегация, DI,\nподмена в рантайме"
+AccidentService o--> AssignmentStrategy : "aggregation, DI\nподмена в рантайме"
 
 InspectionService ..> IAccidentRepository : "DI"
 InspectionService ..> IFileRepository : "DI"
@@ -250,6 +278,7 @@ AuditService ..> IAccidentRepository : "DI"
 FreeExpertStrategy ..> IAccidentRepository : "DI"
 RegionExpertStrategy ..> IAccidentRepository : "DI"
 
+
 ' =====================================================
 ' СВЯЗИ: СЕРВИСЫ -> ДОМЕН (создание / использование)
 ' =====================================================
@@ -258,6 +287,7 @@ AccidentService ..> AuditEvent : "creates"
 InspectionService ..> AuditEvent : "creates"
 InspectionService ..> TaskItem : "enqueues"
 AuditService ..> AuditEvent : "uses"
+
 
 ' =====================================================
 ' СВЯЗИ: ФАСАДЫ И РЕПОЗИТОРИИ -> ДОМЕН
@@ -269,6 +299,7 @@ AccidentRepository ..> AuditEvent
 AccidentRepository ..> TaskItem
 FileRepository ..> Signature
 
+
 ' =====================================================
 ' СВЯЗИ: ВНУТРИ ДОМЕНА
 ' =====================================================
@@ -277,5 +308,27 @@ AccidentClaim "1" *-- "0..1" Signature
 Inspection "0..*" --> "1" AccidentClaim
 AccidentClaim ..> AccidentStatus
 TaskItem ..> TaskType
+
+
+' =====================================================
+' УПРАВЛЕНИЕ LAYOUT (СКРЫТЫЕ СВЯЗИ)
+' =====================================================
+AccidentController -[hidden]down- AccidentService
+InspectionController -[hidden]down- InspectionService
+AccidentService -[hidden]down- AssignmentStrategy
+AccidentService -[hidden]down- IAccidentRepository
+InspectionService -[hidden]down- IFileRepository
+AuditService -[hidden]down- IAccidentRepository
+IAccidentRepository -[hidden]down- AccidentRepository
+IFileRepository -[hidden]down- FileRepository
+AccidentRepository -[hidden]right- FileRepository
+FreeExpertStrategy -[hidden]right- RegionExpertStrategy
+
+
+' =====================================================
+' ПОЯСНЕНИЯ (SOLID, Strategy, соответствие компонентам
+' C4) убраны — переносятся в текст отчёта
+' =====================================================
+
 
 @enduml
