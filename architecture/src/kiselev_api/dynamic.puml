@@ -1,23 +1,19 @@
-@startuml
-!include ../core/C4_Dynamic.puml
-LAYOUT_LEFT_RIGHT()
+﻿@startuml
+!include ../core/C4_Component.puml
 
-title ИС ОСАГО, фиксация ДТП. Динамическая диаграмма — регистрация заявления о ДТП\nи формирование протокола осмотра (Киселев Д.А.)
-
-Person(dispatcher, "Диспетчер", "Принимает заявления о ДТП,\nназначает эксперта", $tags="staff")
-Person(client, "Клиент", "Участник ДТП,\nподписывает протокол", $tags="staff")
+title Динамическая диаграмма — Регистрация заявления о ДТП и формирование протокола осмотра
 
 Container(web_app, "Web App", "React SPA", "Рабочее место диспетчера\nи аварийного эксперта,\nэлектронная подпись клиента")
 
-Container_Boundary(api, "API (FastAPI)") {
+System_Boundary(api, "API (FastAPI)") {
     Component(accident_comp, "AccidentController", "FastAPI Router", "Приём REST-запросов:\nзаявления о ДТП,\nназначение эксперта", $tags="layer_api")
     Component(inspection_comp, "InspectionController", "FastAPI Router", "Приём REST-запросов:\nрезультаты осмотра, фото,\nэлектронная подпись", $tags="layer_api")
-    Component(claim_service, "AccidentService", "Python Service", "Бизнес-логика заявления,\nназначение эксперта,\nсобытия аудита", $tags="layer_service")
-    Component(inspection_service, "InspectionService", "Python Service", "Бизнес-логика осмотра,\nприём фото и подписи,\nпостановка задач", $tags="layer_service")
-    Component(ais_gateway, "AisOsagoFacade", "HTTP Client", "Изоляция вызова:\nпроверка полиса\nчерез АИС ОСАГО", $tags="layer_integration")
+    Component(s_acc, "AccidentService", "Python Service", "Бизнес-логика заявления,\nназначение эксперта,\nсобытия аудита", $tags="layer_service")
+    Component(s_insp, "InspectionService", "Python Service", "Бизнес-логика осмотра,\nприём фото и подписи,\nпостановка задач", $tags="layer_service")
+    Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция вызова:\nпроверка полиса\nчерез АИС ОСАГО", $tags="layer_integration")
     Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка задач\nв очередь outbox", $tags="layer_integration")
-    Component(claims_repo, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям,\naудиту и очереди\nв PostgreSQL", $tags="layer_data")
-    Component(files_repo, "FileRepository", "PyMongo", "Доступ к фото, подписям\nи PDF-документам\nв MongoDB", $tags="layer_data")
+    Component(r_acc, "AccidentRepository", "SQLAlchemy", "Доступ к заявлениям,\nаудиту и очереди\nв PostgreSQL", $tags="layer_data")
+    Component(r_file, "FileRepository", "PyMongo", "Доступ к фото, подписям\nи PDF-документам\nв MongoDB", $tags="layer_data")
 }
 
 ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Заявления, события аудита,\nочередь задач (outbox)")
@@ -28,29 +24,26 @@ Container(worker, "Worker", "Python / Celery", "Фоновая обработк�
 System_Ext(ais_osago, "АИС ОСАГО (РСА)", "Проверка полиса ОСАГО,\nсведения о договоре", $tags="ext")
 System_Ext(email_sys, "E-mail система", "Доставка документов\nи уведомлений", $tags="ext")
 
-' === ФАЗА 1. РЕГИСТРАЦИЯ ЗАЯВЛЕНИЯ (ШАГИ 1–6) ===
-Rel(web_app, accident_comp, "1. Регистрация заявления о ДТП — register_claim()", "REST/HTTPS, JSON")
-Rel(accident_comp, claim_service, "2. Вызов register_claim() — создание заявления", "Python (in-process)")
-Rel(claim_service, ais_gateway, "3. Вызов check_policy() — проверка полиса", "Python (in-process)")
-Rel(ais_gateway, ais_osago, "4. Запрос сведений о полисе ОСАГО", "HTTPS, JSON, mTLS")
-Rel(claim_service, claims_repo, "5. assign_expert() — выбор эксперта (AssignmentStrategy)\nи сохранение", "Python (in-process)")
-Rel(claims_repo, db_audit, "6. Запись заявления, статуса ASSIGNED и события аудита", "SQL/TCP 5432")
+' === СЦЕНАРИЙ: ХРОНОЛОГИЯ ВЫЗОВОВ (СКОЗНОЙ ПРОЦЕСС) ===
 
-' === ФАЗА 2. ОСМОТР, ФОТО И ПОДПИСЬ (ШАГИ 7–12) ===
-Rel(web_app, inspection_comp, "7. Приём результатов осмотра — submit_results()", "REST/HTTPS, JSON")
-Rel(inspection_comp, inspection_service, "8. Вызов submit_results() — обработка результатов осмотра", "Python (in-process)")
-Rel(inspection_service, files_repo, "9. Вызов upload_photos() и accept_signature() —\nфото и подпись клиента", "Python (in-process)")
-Rel(files_repo, db_files, "10. Сохранение фотографий осмотра и подписи (GridFS)", "MongoDB/TCP 27017")
-Rel(inspection_service, task_queue_comp, "11. Вызов enqueue() — постановка задачи PDF_PROTOCOL", "Python (in-process)")
-Rel(task_queue_comp, claims_repo, "12. Вызов save_task() — запись задачи в очередь outbox", "Python (in-process)")
+Rel(web_app, accident_comp, "1. Регистрация заявления о ДТП — register_claim", "REST/HTTPS, JSON")
+Rel(accident_comp, s_acc, "2. Вызов register_claim() — создание заявления", "Python (in-process)")
+Rel(s_acc, f_ais, "3. Вызов check_policy() — проверка полиса", "Python (in-process)")
+Rel(f_ais, ais_osago, "4. Запрос сведений о полисе ОСАГО", "HTTPS, JSON, mTLS")
+Rel(s_acc, r_acc, "5. assign_expert() — выбор эксперта (AssignmentStrategy) и сохранение", "Python (in-process)")
+Rel(r_acc, db_audit, "6. Запись заявления, статуса ASSIGNED и события аудита", "SQL/TCP 5432")
 
-' === ФАЗА 3. ФОНОВАЯ ГЕНЕРАЦИЯ ПРОТОКОЛА (ШАГИ 13–15) ===
+Rel(web_app, inspection_comp, "7. Приём результатов осмотра — submit_results", "REST/HTTPS, JSON")
+Rel(inspection_comp, s_insp, "8. Вызов submit_results() — обработка результатов осмотра", "Python (in-process)")
+Rel(s_insp, r_file, "9. Вызов upload_photos() и accept_signature() — фото и подпись клиента", "Python (in-process)")
+Rel(r_file, db_files, "10. Сохранение фотографий осмотра и подписи (GridFS)", "MongoDB Wire/TCP 27017")
+
+Rel(s_insp, task_queue_comp, "11. Вызов enqueue() — постановка задачи PDF_PROTOCOL", "Python (in-process)")
+Rel(task_queue_comp, r_acc, "12. Вызов save_task() — запись задачи в очередь outbox", "Python (in-process)")
+
 Rel(worker, db_audit, "13. Выборка задач из очереди и обновление статусов", "SQL/TCP 5432")
-Rel(worker, db_files, "14. Чтение фотографий, генерация и сохранение PDF-протокола", "MongoDB/TCP 27017")
-Rel(worker, email_sys, "15. Отправка протокола осмотра клиенту", "SMTP / STARTTLS")
-
-Rel(email_sys, client, "Доставка протокола осмотра", "E-mail", $tags="async")
-Rel(dispatcher, web_app, "Регистрирует заявление,\nназначает эксперта", "HTTPS")
+Rel(worker, db_files, "14. Чтение фотографий, генерация и сохранение PDF-протокола", "MongoDB Wire/TCP 27017")
+Rel(worker, email_sys, "15. Отправка протокола осмотра клиенту", "SMTP / STARTTLS", $tags="async")
 
 SHOW_LEGEND()
 @enduml

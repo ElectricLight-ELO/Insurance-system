@@ -220,3 +220,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 *.pdf
+docs_and_diagrams/writter_merger.md
