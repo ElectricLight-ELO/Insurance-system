@@ -63,6 +63,7 @@ package "Слой бизнес-логики: сервисы" {
         + submit_results(inspection: Inspection) -> Inspection
         + upload_photos(claim_id: UUID, photos: list[bytes]) -> list[UUID]
         + accept_signature(claim_id: UUID, signature: Signature) -> Signature
+        - _check_policy(claim: AccidentClaim) -> bool
         - _audit_event(actor: str, action: str, entity_id: UUID) -> None
     }
 

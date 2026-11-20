@@ -1,4 +1,4 @@
-@startuml
+﻿@startuml
 !include ../core/C4_Component.puml
 
 title C4 COMPONENT — API (FASTAPI): ИС ОСАГО, фиксация ДТП
@@ -28,7 +28,7 @@ Container_Boundary(api, "API — FASTAPI") {
 
     ' --- Слой интеграции ---
     together {
-        Component(f_task, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(генерация PDF-протокола)", $tags="layer_integration")
+        Component(task_queue_comp, "TaskQueueFacade", "SQL Client", "Постановка асинхронных задач\nв очередь для Worker\n(генерация PDF-протокола)", $tags="layer_integration")
         Component(f_ais, "AisOsagoFacade", "HTTP Client", "Изоляция внешнего вызова:\nпроверка наличия полиса ОСАГО\nчерез АИС ОСАГО", $tags="layer_integration")
     }
 
@@ -77,7 +77,7 @@ Rel(s_insp, audit_comp, "События аудита", "Python (in-process)", $t
 Rel(admin_comp, audit_comp, "Просмотр журнала аудита", "Python (in-process)", $tags="audit")
 
 ' Сервисы -> Фасады
-Rel(s_insp, f_task, "Задача на PDF", "Python (in-process)")
+Rel(s_insp, task_queue_comp, "Задача на PDF", "Python (in-process)")
 Rel(s_insp, f_ais, "Проверка полиса", "Python (in-process)")
 
 ' Сервисы -> Репозитории
@@ -86,7 +86,7 @@ Rel(s_insp, r_file, "Сохранение фото", "Python (in-process)")
 Rel(audit_comp, r_acc, "Запись аудита", "Python (in-process)")
 
 ' Фасад -> Репозиторий
-Rel(f_task, r_acc, "Очередь задач", "SQL/TCP 5432")
+Rel(task_queue_comp, r_acc, "Очередь задач", "SQL/TCP 5432")
 
 ' Репозитории -> БД
 Rel(r_acc, db_audit, "Данные", "SQL/TCP 5432")
