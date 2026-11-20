@@ -1,21 +1,13 @@
 @startuml
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include ../core/C4_Container.puml
 
 title АВАРИЙНЫЙ ЭКСПЕРТ C4 CONTAINER
 
+Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="staff")
+Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="staff")
+Person(client, "Участник ДТП", "Подписывает электронный\nпротокол осмотра", $tags="staff")
 
-AddSystemTag("внешняя_система", $bgColor="#A9A9A9", $borderColor="#8A8A8A", $fontColor="#FFFFFF")
-AddPersonTag("персона_синяя", $bgColor="#1F4E8C", $borderColor="#143560", $fontColor="#FFFFFF")
-AddRelTag("пунктир", $lineStyle = DashedLine(), $lineColor = "#000000")
-
-
-
-Person(dispatcher, "Диспетчер", "Оператор колл-центра: принимает\nзаявления о ДТП, назначает эксперта", $tags="персона_синяя")
-Person(expert, "Аварийный эксперт", "Сотрудник, выезжающий\nна место ДТП", $tags="персона_синяя")
-Person(client, "Клиент", "Участник ДТП", $tags="персона_синяя")
-
-
-System_Boundary(fixation_system, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
+System_Boundary(osago_service, "Информационная система оформления ОСАГО (ИС ОСАГО)") {
 
     Container(web_app, "Web App", "React SPA", "Рабочее место эксперта: загрузка фото осмотра,\nсведения о ДТП, электронная подпись клиента")
 
@@ -28,48 +20,25 @@ System_Boundary(fixation_system, "Информационная система о
     ContainerDb(db_files, "DB_FILES", "MongoDB", "Хранит фото ДТП, подписи\nи файлы документов")
 }
 
+System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="ext")
+System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="ext")
 
-System_Ext(ais_osago, "АИС ОСАГО", "Автоматизированная информационная система", $tags="внешняя_система")
-System_Ext(email_sys, "E-mail система", "Внутренняя система обмена письмами", $tags="внешняя_система")
+Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус", "HTTPS")
+Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП", "HTTPS")
+Rel(client, web_app, "Ставит электронную подпись\nна протоколе осмотра", "HTTPS")
 
+Rel(web_app, api, "Отправка\nрезультатов осмотра", "REST/HTTPS, JSON")
 
+Rel(api, db_audit, "Читает и записывает акты фиксации,\nстатусы осмотра, события аудита", "SQL/TCP 5432")
+Rel(api, db_files, "Сохраняет фото\nи подписи", "MongoDB Wire/TCP 27017")
 
-Rel(dispatcher, web_app, "Регистрирует заявление о ДТП,\nназначает эксперта, отслеживает статус")
-Rel(expert, web_app, "Загружает фотографии осмотра\nи сведения о ДТП")
-Rel(client, web_app, "Ставит электронную подпись\nна протоколе осмотра")
+Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО", "HTTPS, JSON, mTLS", $tags="async")
 
-Rel(web_app, api, "REST/HTTPS JSON — отправка\nрезультатов осмотра")
+Rel(worker, db_audit, "Читает и обновляет\nстатусы задач", "SQL/TCP 5432")
+Rel(worker, db_files, "Чтение фото и подписей для протокола,\nсохранение PDF-протокола", "MongoDB Wire/TCP 27017")
+Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", "HTTPS, JSON, mTLS", $tags="async")
+Rel(worker, email_sys, "Отправляет протокол\nосмотра", "SMTP / STARTTLS", $tags="async")
+Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", "E-mail", $tags="async")
 
-
-Rel(api, db_audit, "Читает и записывает акты фиксации,\nстатусы осмотра, события аудита, SQL")
-Rel(api, db_files, "Сохраняет фото\nи подписи, MongoDB driver")
-
-
-Rel(api, ais_osago, "Проверяет наличие полиса ОСАГО,\nHTTP(S), JSON", $tags="пунктир")
-
-' Rel(api, email_sys, "Отправляет уведомления о статусе\nзаявления, SMTP", $tags="пунктир")
-
-
-Rel(worker, db_audit, "Читает и обновляет\nстатусы задач, SQL")
-Rel(worker, db_files, "Читает фото и подписи для протокола,\nсохраняет PDF-протокол, MongoDB driver")
-
-
-Rel(worker, ais_osago, "Повторная проверка наличия\nполиса при сбое", $tags="пунктир")
-Rel(worker, email_sys, "Отправляет протокол\nосмотра", $tags="пунктир")
-Rel(email_sys, client, "Доставка электронного\nпротокола осмотра", $tags="пунктир")
-
-
-
-dispatcher -[hidden]right- expert
-expert -[hidden]right- client
-dispatcher -[hidden]down- web_app
-
-web_app -[hidden]down- api
-api -[hidden]down- db_audit
-db_audit -[hidden]right- db_files
-db_audit -[hidden]down- worker
-
-fixation_system -[hidden]down- ais_osago
-ais_osago -[hidden]right- email_sys
-
+SHOW_LEGEND()
 @enduml
