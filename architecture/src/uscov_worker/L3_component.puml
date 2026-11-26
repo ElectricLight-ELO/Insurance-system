@@ -1,51 +1,73 @@
 @startuml
 !include ../core/C4_Component.puml
 
-title C4 COMPONENT — Worker (Python / Celery): Модуль бухгалтерии и финансового контроля
+title C4 COMPONENT — WORKER (CELERY): ИС ОСАГО, фин. контроль и маржа
 
-Container(api, "API", "FastAPI", "Приём запросов от Web App,\nзапись задач в очередь outbox")
-ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Финансовые транзакции, аудит,\nочередь задач (outbox)")
-ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
-ContainerDb(db_files, "DB_FILES", "MongoDB / GridFS", "Финансовые отчеты и акты")
+Container_Boundary(worker, "Worker [Python / Celery]") {
 
-Container_Boundary(worker, "Worker — Python / Celery") {
-    Component(beat_poller, "OutboxConsumer / Beat", "Celery Beat & Worker", "Опрос очереди outbox и запуск\nпериодических/фоновых задач")
-    Component(margin_worker, "MarginCalcTask", "Celery Task", "Фоновый расчет маржинальности\nпериода и агентских комиссий (КВ)")
-    Component(recon_worker, "PaymentReconcileTask", "Celery Task", "Фоновая сверка зависших\nплатежей с эквайрингом")
-    Component(report_worker, "ReportGeneratorTask", "Celery Task", "Формирование закрывающих\nфинансовых PDF-отчетов и актов")
-    Component(notify_worker, "EmailNotifyTask", "Celery Task", "Отправка готовых отчетов\nи уведомлений бухгалтеру")
+    ' --- Слой приема задач / consumers ---
+    together {
+        Component(c_margin, "MarginCalculationTask", "Celery Task", "Асинхронная задача:\nфоновый просчет маржи\nпериода и прибыльности", $tags="consumer")
+        Component(c_reconcile, "GatewayReconciliationTask", "Celery Task", "Периодическая задача:\nсверка зависших транзакций\nс платежной системой", $tags="consumer")
+    }
 
-    Component(worker_audit_repo, "WorkerAuditRepository", "SQLAlchemy", "Чтение транзакций, обновление\nстатусов и запись аудита в DB_AUDIT")
-    Component(worker_tariff_repo, "WorkerTariffRepository", "SQLAlchemy", "Чтение тарифов и ставок КВ\nиз DB_TARIFS")
-    Component(worker_files_repo, "WorkerFileRepository", "PyMongo", "Сохранение PDF-отчетов\nв MongoDB / GridFS")
-    Component(worker_bank_client, "AcquiringClient", "HTTP Client", "Запрос статусов транзакций\nв платежной системе")
-    Component(worker_mail_client, "SmtpClient", "SMTP Client", "Отправка отчетов через\nпочтовый шлюз")
+    ' --- Слой бизнес-логики ---
+    together {
+        Component(s_audit, "AuditService", "Python Service", "Запись системных логов\nи статусов выполнения задач", $tags="service")
+        Component(s_margin, "MarginService", "Python Service", "Логика агрегации данных,\nрасчета маржи и комиссий (КВ)", $tags="service")
+        Component(s_reconcile, "ReconciliationService", "Python Service", "Бизнес-правила сопоставления\nпоступлений и списанных комиссий", $tags="service")
+    }
+
+    ' --- Слой интеграции ---
+    together {
+        Component(f_pay, "PaymentGatewayFacade", "HTTP Client", "Изоляция внешнего вызова:\nзапрос статусов и отчетов\nу Платежной системы", $tags="integration")
+    }
+
+    ' --- Слой доступа к данным ---
+    together {
+        Component(r_audit, "AuditRepository", "SQLAlchemy", "Доступ к таблицам аудита,\nочереди задач и финансовым\nлогам в PostgreSQL", $tags="data")
+    }
 }
 
-System_Ext(payment_sys, "Платежная система / Эквайринг", "Внешний банковский шлюз,\nстатусы платежей", $tags="ext")
-System_Ext(email_sys, "E-mail система", "Доставка финансовых отчетов\nи уведомлений бухгалтеру", $tags="ext")
+' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
+together {
+    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Очередь задач, журнал аудита\nи результаты расчетов")
+    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и коэффициенты\nдля расчетов маржи")
+}
+together {
+    System_Ext(payment_sys, "Платежная система", "Проведение платежей, чистые поступления, комиссии", $tags="ext")
+}
 
-Rel(api, db_audit, "Постановка фоновых задач в outbox", "SQL/TCP 5432")
-Rel(beat_poller, db_audit, "Выборка задач из outbox", "SQL/TCP 5432")
+' === СВЯЗИ (RELATIONSHIPS) ===
 
-Rel(beat_poller, margin_worker, "Запуск задачи расчета маржи и КВ", "Celery / Python")
-Rel(beat_poller, recon_worker, "Запуск задачи сверки платежей", "Celery / Python")
-Rel(beat_poller, report_worker, "Запуск генерации отчета", "Celery / Python")
-Rel(report_worker, notify_worker, "Постановка задачи отправки отчета", "Celery / Python")
+' Очередь -> Задачи воркера
+Rel(db_audit, c_margin, "Вызов задачи", "Redis Broker", $tags="async")
+Rel(db_audit, c_reconcile, "Запуск по расписанию", "Celery Beat", $tags="async")
 
-Rel(margin_worker, worker_tariff_repo, "Чтение тарифов и ставок КВ", "Python (in-process)")
-Rel(margin_worker, worker_audit_repo, "Чтение транзакций и запись аудита", "Python (in-process)")
-Rel(recon_worker, worker_audit_repo, "Поиск PENDING и обновление статусов", "Python (in-process)")
-Rel(recon_worker, worker_bank_client, "Запрос статуса транзакции", "Python (in-process)")
-Rel(report_worker, worker_audit_repo, "Выборка данных для отчета", "Python (in-process)")
-Rel(report_worker, worker_files_repo, "Сохранение PDF-отчета", "Python (in-process)")
-Rel(notify_worker, worker_mail_client, "Передача отчета на отправку", "Python (in-process)")
+' Задачи -> Сервисы
+Rel(c_margin, s_margin, "Исполнение логики", "Python")
+Rel(c_reconcile, s_reconcile, "Исполнение логики", "Python")
 
-Rel(worker_tariff_repo, db_tarifs, "Чтение тарифных сеток и КВ", "SQL/TCP 5432")
-Rel(worker_audit_repo, db_audit, "Очередь outbox, транзакции, аудит", "SQL/TCP 5432")
-Rel(worker_files_repo, db_files, "Запись PDF-отчетов и актов", "MongoDB/TCP 27017")
-Rel(worker_bank_client, payment_sys, "Сверка статусов платежей", "HTTPS, JSON")
-Rel(worker_mail_client, email_sys, "Отправка отчетов бухгалтеру", "SMTP / STARTTLS", $tags="async")
+' Сервисы -> Аудит
+Rel(s_margin, s_audit, "Логирование статуса", "Python")
+Rel(s_reconcile, s_audit, "Логирование статуса", "Python")
 
+' Сервисы -> Фасады
+Rel(s_reconcile, f_pay, "Запрос сверки транзакций", "Python")
+
+' Сервисы -> Репозитории
+Rel(s_margin, r_audit, "Чтение/запись результатов", "SQLAlchemy")
+Rel(s_reconcile, r_audit, "Обновление статусов", "SQLAlchemy")
+Rel(s_audit, r_audit, "Запись логов аудита", "SQLAlchemy")
+
+' Репозитории -> БД
+Rel(r_audit, db_audit, "Данные и очередь", "SQL/TCP 5432")
+Rel(s_margin, db_tarifs, "Чтение тарифов для расчета", "SQL/TCP 5432")
+
+' Фасад -> Внешняя система
+Rel(f_pay, payment_sys, "Сверка зависших транзакций", "HTTPS/JSON", $tags="async")
+
+' === ЛЕГЕНДА ===
 SHOW_LEGEND()
+
 @enduml
