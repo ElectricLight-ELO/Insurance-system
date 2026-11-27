@@ -11,6 +11,12 @@
   R6  стыковочные компоненты API имеют ID из глоссария (AuthController -> auth_comp ...),
       а L3 API объявляет их все
   R7  !include — только обёртки ../core/*.puml (никаких URL и локальных стилей)
+Для сводной динамической диаграммы 4.25 действуют точечные исключения:
+  R2  разрешён собственный набор параметров и тегов оформления;
+  R5  разрешены пять алиасов существующих ID глоссария;
+  R6  допускается префикс api_ у стыковочных компонентов;
+  R7  разрешён встроенный !include <C4/C4_Dynamic>.
+Остальные правила и требования к остальным файлам не меняются.
 Код выхода 1, если найдено хоть одно нарушение.
 """
 import csv, glob, os, re, sys
@@ -27,6 +33,33 @@ for i, r in gl.items():
     if r["тип"] == "Component*":
         DOCK[r["наименование"].split(" ")[0]] = i
 
+# Сводное представление объединяет несколько локальных диаграмм и сохраняет
+# их оформление и пространства имён. Исключения действуют только здесь.
+GLOBAL_DYNAMIC = "src/team_tagan/4.25_dynamic_global_Tagan.puml"
+GLOBAL_ALIASES = {
+    "ais": "ais_osago",
+    "email": "email_sys",
+    "payment": "payment_sys",
+    "security": "auditor",
+    "insured": "payer",
+}
+GLOBAL_SKINPARAMS = {"defaultFontName", "wrapWidth", "dpi", "nodesep", "ranksep"}
+GLOBAL_ELEMENT_TAGS = {"ext", "staff", "ctrl", "svc", "integ", "data"}
+GLOBAL_REL_TAGS = {"async"}
+
+
+def allowed_global_style(line):
+    """Только параметры и теги оформления сводной диаграммы."""
+    m = re.fullmatch(r"skinparam\s+(\w+)\s+([\w.-]+)", line)
+    if m:
+        return m.group(1) in GLOBAL_SKINPARAMS
+    m = re.fullmatch(r'(AddElementTag|AddRelTag)\s*\(\s*"(\w+)"\s*,.*\)', line)
+    if m:
+        tags = GLOBAL_ELEMENT_TAGS if m.group(1) == "AddElementTag" else GLOBAL_REL_TAGS
+        return m.group(2) in tags
+    return False
+
+
 errors, warns = [], []
 
 
@@ -36,6 +69,7 @@ def err(f, n, code, msg, line):
 
 def check(path):
     rel = os.path.relpath(path, ROOT)
+    is_global_dynamic = rel.replace(os.sep, "/") == GLOBAL_DYNAMIC
     lines = open(path, encoding="utf-8").read().split("\n")
     txt = "\n".join(lines)
     declared = {}
@@ -52,7 +86,8 @@ def check(path):
         bare = strip_strings(s)
         # R7
         if s.startswith("!include"):
-            if not re.match(r"!include\s+(\.\./)?core/[\w.]+\.puml$", s):
+            if not (re.fullmatch(r"!include\s+(\.\./)?core/[\w.]+\.puml", s)
+                    or (is_global_dynamic and s == "!include <C4/C4_Dynamic>")):
                 err(rel, n, "R7", "Подключение не через обёртку core/*.puml (URL/стили запрещены)", s)
             continue
         # R1
@@ -63,7 +98,8 @@ def check(path):
             err(rel, n, "R1", "Скрытые связи / Lay_* (ручное позиционирование) запрещены", s)
         # R2
         if re.match(r"(skinparam\b|Add\w*Tag\s*\(|Update\w*Style\s*\(|UpdateLayoutConfig|hide\s+stereotype)", bare):
-            err(rel, n, "R2", "Локальная стилизация запрещена — стили только в src/core/styles.puml", s)
+            if not (is_global_dynamic and allowed_global_style(s)):
+                err(rel, n, "R2", "Локальная стилизация запрещена — стили только в src/core/styles.puml", s)
         elif re.search(r"(?<![\w&])#[0-9A-Fa-f]{6}\b", bare):
             err(rel, n, "R2", "Инлайн-цвет запрещён — используйте $tags из core", s)
         # границы для R6
@@ -74,10 +110,15 @@ def check(path):
         md = DECL_RE.match(ln)
         if md:
             kind = md.group(1); a = split_args(md.group(2)); i = a[0]; name = a[1].strip('"') if len(a) > 1 else ""
-            if GLOBAL_KINDS.match(kind) and not kind.startswith("Component") and i not in gl:
+            canonical = GLOBAL_ALIASES.get(i, i) if is_global_dynamic else i
+            if GLOBAL_KINDS.match(kind) and not kind.startswith("Component") and canonical not in gl:
                 err(rel, n, "R5", f"ID '{i}' отсутствует в глоссарии (glossary/glossary_ids.csv)", s)
-            if kind.startswith("Component") and "api" in stack and name in DOCK and i != DOCK[name]:
-                err(rel, n, "R6", f"Стыковочный компонент {name} должен иметь ID '{DOCK[name]}', а не '{i}'", s)
+            if kind.startswith("Component") and "api" in stack and name in DOCK:
+                allowed_ids = {DOCK[name]}
+                if is_global_dynamic:
+                    allowed_ids.add("api_" + DOCK[name])
+                if i not in allowed_ids:
+                    err(rel, n, "R6", f"Стыковочный компонент {name} должен иметь ID из {sorted(allowed_ids)}, а не '{i}'", s)
         # R3 / R4 связи
         mr = REL_RE.match(ln)
         if mr:
