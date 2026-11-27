@@ -16,8 +16,8 @@ System_Boundary(api, "API (FastAPI)") {
     Component(r_tariff, "TariffRepository", "SQLAlchemy", "Доступ к тарифным сеткам\nи коэффициентам\nв PostgreSQL", $tags="data")
 }
 
-ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Финансовые транзакции,\nсобытия аудита, очередь задач")
-ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
+ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Финансовые транзакции,\nсобытия аудита, очередь задач")
+ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки и\nставки комиссий (КВ)")
 
 Container(worker, "Worker", "Python / Celery", "Фоновая обработка:\nфоновый расчет маржи,\nпериодическая сверка (Beat)")
 

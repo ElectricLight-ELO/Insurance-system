@@ -31,11 +31,11 @@ node "Корпоративный сервер (on-prem)\nDocker host, Linux, 16 
 
         artifact "Worker (Celery)\nинстанс 2\n(генерация отчетов PDF)" as worker2
 
-        database "BD_AUDIT\nPostgreSQL, Master\n:5432, TLS\n(очередь задач, транзакции, логи)" as pg_audit_master
+        database "DB_AUDIT\nPostgreSQL, Master\n:5432, TLS\n(очередь задач, транзакции, логи)" as pg_audit_master
 
-        database "BD_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as pg_audit_replica
+        database "DB_AUDIT\nPostgreSQL, Replica\n(hot standby), :5432" as pg_audit_replica
 
-        database "BD_TARIFS\nPostgreSQL\n:5432, TLS\n(тарифные коэффициенты и КВ)" as pg_tariffs
+        database "DB_TARIFS\nPostgreSQL\n:5432, TLS\n(тарифные коэффициенты и КВ)" as pg_tariffs
 
         database "DB_FILES\nMongoDB / GridFS\n:27017, TLS\n(акты и PDF-протоколы)" as mongo_files
     }
