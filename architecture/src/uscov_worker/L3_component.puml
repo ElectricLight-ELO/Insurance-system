@@ -31,8 +31,8 @@ Container_Boundary(worker, "Worker [Python / Celery]") {
 
 ' === ВНЕШНИЕ СИСТЕМЫ И БД (СНИЗУ) ===
 together {
-    ContainerDb(db_audit, "BD_AUDIT", "PostgreSQL", "Очередь задач, журнал аудита\nи результаты расчетов")
-    ContainerDb(db_tarifs, "BD_TARIFS", "PostgreSQL", "Тарифные сетки и коэффициенты\nдля расчетов маржи")
+    ContainerDb(db_audit, "DB_AUDIT", "PostgreSQL", "Очередь задач, журнал аудита\nи результаты расчетов")
+    ContainerDb(db_tarifs, "DB_TARIFS", "PostgreSQL", "Тарифные сетки и коэффициенты\nдля расчетов маржи")
 }
 together {
     System_Ext(payment_sys, "Платежная система", "Проведение платежей, чистые поступления, комиссии", $tags="ext")
